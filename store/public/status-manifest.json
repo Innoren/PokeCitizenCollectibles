@@ -1,0 +1,16 @@
+{
+  "name": "PokeCitizen Monitor",
+  "short_name": "PC Monitor",
+  "description": "Status monitor for PokeCitizen Collectibles store",
+  "start_url": "/status",
+  "display": "standalone",
+  "background_color": "#111827",
+  "theme_color": "#111827",
+  "icons": [
+    {
+      "src": "/status-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
