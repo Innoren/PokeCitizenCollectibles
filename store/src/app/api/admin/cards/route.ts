@@ -50,6 +50,49 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// PUT — Update an existing card
+export async function PUT(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { id, name, setName, rarity, condition, price, imageUrl, description, stock, sku } = body;
+
+    if (!id) {
+      return NextResponse.json({ error: 'Card ID is required' }, { status: 400 });
+    }
+
+    if (!name || !setName || !rarity || !condition || !price) {
+      return NextResponse.json(
+        { error: 'Missing required fields: name, setName, rarity, condition, price' },
+        { status: 400 }
+      );
+    }
+
+    const [updated] = await db
+      .update(cards)
+      .set({
+        sku: sku || null,
+        name,
+        setName,
+        rarity,
+        condition,
+        price: String(price),
+        imageUrl: imageUrl || '',
+        description: description || null,
+        stock: stock ?? 1,
+      })
+      .where(eq(cards.id, parseInt(id, 10)))
+      .returning();
+
+    return NextResponse.json({ card: updated });
+  } catch (error: any) {
+    console.error('Error updating card:', error);
+    return NextResponse.json(
+      { error: error.message || 'Failed to update card' },
+      { status: 500 }
+    );
+  }
+}
+
 // DELETE — Remove a card by ID
 export async function DELETE(request: NextRequest) {
   try {

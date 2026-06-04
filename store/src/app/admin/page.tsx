@@ -41,6 +41,8 @@ export default function AdminPage() {
   const [showInventory, setShowInventory] = useState(false);
   const [lookupLoading, setLookupLoading] = useState(false);
   const [lookupMessage, setLookupMessage] = useState('');
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editForm, setEditForm] = useState<any>({});
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -155,6 +157,47 @@ export default function AdminPage() {
     }
   };
 
+  const startEdit = (card: any) => {
+    setEditingId(card.id);
+    setEditForm({
+      sku: card.sku || '',
+      name: card.name,
+      setName: card.setName,
+      rarity: card.rarity,
+      condition: card.condition,
+      price: card.price,
+      imageUrl: card.imageUrl || '',
+      description: card.description || '',
+      stock: card.stock,
+    });
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditForm({});
+  };
+
+  const saveEdit = async (id: number) => {
+    try {
+      const res = await fetch('/api/admin/cards', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, ...editForm, price: parseFloat(editForm.price), stock: parseInt(editForm.stock, 10) }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        alert(data.error || 'Failed to update');
+        return;
+      }
+      const data = await res.json();
+      setCards(cards.map((c) => (c.id === id ? data.card : c)));
+      setEditingId(null);
+      setEditForm({});
+    } catch {
+      alert('Failed to update card');
+    }
+  };
+
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {/* Header */}
@@ -237,7 +280,7 @@ export default function AdminPage() {
               </p>
             )}
             <p className="text-xs text-blue-600 mt-2">
-              Format: set code + card number (e.g. swsh3-20). Or just type a card name to search.
+              Search by set code + number (e.g. swsh3-20), card name (e.g. Charizard VMAX), or partial name.
               This is optional — you can fill in everything manually below.
             </p>
           </div>
@@ -489,23 +532,49 @@ export default function AdminPage() {
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {cards.map((card) => (
-                    <tr key={card.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 text-gray-500 text-xs font-mono">{card.sku || '—'}</td>
-                      <td className="px-4 py-3 font-medium text-gray-900">{card.name}</td>
-                      <td className="px-4 py-3 text-gray-600">{card.setName}</td>
-                      <td className="px-4 py-3 text-gray-600">{card.rarity}</td>
-                      <td className="px-4 py-3 text-gray-600">{card.condition}</td>
-                      <td className="px-4 py-3 text-right text-gray-900 font-medium">${card.price}</td>
-                      <td className="px-4 py-3 text-right text-gray-900">{card.stock}</td>
-                      <td className="px-4 py-3 text-right">
-                        <button
-                          onClick={() => deleteCard(card.id)}
-                          className="text-red-500 hover:text-red-700 text-xs font-medium"
-                        >
-                          Delete
-                        </button>
-                      </td>
-                    </tr>
+                    editingId === card.id ? (
+                      <tr key={card.id} className="bg-yellow-50">
+                        <td className="px-4 py-2">
+                          <input type="text" value={editForm.sku} onChange={(e) => setEditForm({ ...editForm, sku: e.target.value })} className="w-full px-2 py-1 border rounded text-xs" placeholder="SKU" />
+                        </td>
+                        <td className="px-4 py-2">
+                          <input type="text" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} className="w-full px-2 py-1 border rounded text-sm" />
+                        </td>
+                        <td className="px-4 py-2">
+                          <input type="text" value={editForm.setName} onChange={(e) => setEditForm({ ...editForm, setName: e.target.value })} className="w-full px-2 py-1 border rounded text-sm" />
+                        </td>
+                        <td className="px-4 py-2">
+                          <input type="text" value={editForm.rarity} onChange={(e) => setEditForm({ ...editForm, rarity: e.target.value })} className="w-full px-2 py-1 border rounded text-sm" />
+                        </td>
+                        <td className="px-4 py-2">
+                          <input type="text" value={editForm.condition} onChange={(e) => setEditForm({ ...editForm, condition: e.target.value })} className="w-full px-2 py-1 border rounded text-sm" />
+                        </td>
+                        <td className="px-4 py-2">
+                          <input type="number" value={editForm.price} onChange={(e) => setEditForm({ ...editForm, price: e.target.value })} className="w-20 px-2 py-1 border rounded text-sm text-right" step="0.01" />
+                        </td>
+                        <td className="px-4 py-2">
+                          <input type="number" value={editForm.stock} onChange={(e) => setEditForm({ ...editForm, stock: e.target.value })} className="w-16 px-2 py-1 border rounded text-sm text-right" min="0" />
+                        </td>
+                        <td className="px-4 py-2 text-right space-x-2 whitespace-nowrap">
+                          <button onClick={() => saveEdit(card.id)} className="text-green-600 hover:text-green-800 text-xs font-medium">Save</button>
+                          <button onClick={cancelEdit} className="text-gray-500 hover:text-gray-700 text-xs font-medium">Cancel</button>
+                        </td>
+                      </tr>
+                    ) : (
+                      <tr key={card.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 text-gray-500 text-xs font-mono">{card.sku || '—'}</td>
+                        <td className="px-4 py-3 font-medium text-gray-900">{card.name}</td>
+                        <td className="px-4 py-3 text-gray-600">{card.setName}</td>
+                        <td className="px-4 py-3 text-gray-600">{card.rarity}</td>
+                        <td className="px-4 py-3 text-gray-600">{card.condition}</td>
+                        <td className="px-4 py-3 text-right text-gray-900 font-medium">${card.price}</td>
+                        <td className="px-4 py-3 text-right text-gray-900">{card.stock}</td>
+                        <td className="px-4 py-3 text-right space-x-2 whitespace-nowrap">
+                          <button onClick={() => startEdit(card)} className="text-blue-500 hover:text-blue-700 text-xs font-medium">Edit</button>
+                          <button onClick={() => deleteCard(card.id)} className="text-red-500 hover:text-red-700 text-xs font-medium">Delete</button>
+                        </td>
+                      </tr>
+                    )
                   ))}
                 </tbody>
               </table>

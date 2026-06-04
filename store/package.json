@@ -9,9 +9,10 @@
     "lint": "next lint",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:push": "drizzle-kit push",
+    "db:push": "drizzle-kit push:pg",
     "db:seed": "npx tsx --env-file=.env.local src/db/seed.ts",
-    "db:create-admin": "npx tsx --env-file=.env.local src/db/create-admin.ts"
+    "db:create-admin": "npx tsx --env-file=.env.local src/db/create-admin.ts",
+    "db:import": "npx tsx --env-file=.env.local src/db/import-csv.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "0.9.5",

@@ -36,11 +36,26 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // If direct lookup failed, try searching by number + set
+    // If direct lookup failed, try searching by name
     if (!card) {
-      // Try as a search query (card name or number)
-      const query = encodeURIComponent(`name:"${sku}" OR number:"${sku}"`);
-      const res = await fetch(`${POKEMON_TCG_API}/cards?q=${query}&pageSize=1`, {
+      // Search by name (supports partial matches with wildcard)
+      const nameQuery = encodeURIComponent(`name:"${sku}*"`);
+      const res = await fetch(`${POKEMON_TCG_API}/cards?q=${nameQuery}&pageSize=1&orderBy=-set.releaseDate`, {
+        headers: { 'X-Api-Key': process.env.POKEMON_TCG_API_KEY || '' },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.data && data.data.length > 0) {
+          card = data.data[0];
+        }
+      }
+    }
+
+    // If still not found, try a looser name search (without quotes for multi-word)
+    if (!card && sku.includes(' ')) {
+      const words = sku.split(/\s+/).map((w) => `name:${w}*`).join(' ');
+      const looseQuery = encodeURIComponent(words);
+      const res = await fetch(`${POKEMON_TCG_API}/cards?q=${looseQuery}&pageSize=1&orderBy=-set.releaseDate`, {
         headers: { 'X-Api-Key': process.env.POKEMON_TCG_API_KEY || '' },
       });
       if (res.ok) {

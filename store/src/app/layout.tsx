@@ -3,12 +3,16 @@ import { Inter } from 'next/font/google';
 import './globals.css';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
+import AdminFloatingButton from '@/components/AdminFloatingButton';
 
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
   title: 'PokeCitizen Collectibles — Premium Pokemon Card Store',
   description: 'Discover rare and authentic Pokémon trading cards. From vintage classics to the latest releases.',
+  icons: {
+    icon: '/favicon.svg',
+  },
 };
 
 export default function RootLayout({
@@ -24,6 +28,7 @@ export default function RootLayout({
           <main className="flex-1">{children}</main>
           <Footer />
         </div>
+        <AdminFloatingButton />
       </body>
     </html>
   );
