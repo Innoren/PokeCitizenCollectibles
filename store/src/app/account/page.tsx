@@ -28,8 +28,7 @@ export default function AccountPage() {
 
   const handleLogout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' });
-    router.push('/');
-    router.refresh();
+    window.location.href = '/';
   };
 
   if (loading) {
