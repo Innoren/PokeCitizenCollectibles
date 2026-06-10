@@ -33,11 +33,10 @@ export default function LoginPage() {
 
       // Redirect admin users to admin panel, others to home
       if (data.user.isAdmin) {
-        router.push('/admin');
+        window.location.href = '/admin';
       } else {
-        router.push('/');
+        window.location.href = '/';
       }
-      router.refresh();
     } catch {
       setError('Connection error');
       setLoading(false);
