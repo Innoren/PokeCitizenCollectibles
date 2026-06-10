@@ -27,8 +27,8 @@ export default function RootLayout({
           <Navbar />
           <main className="flex-1">{children}</main>
           <Footer />
+          <AdminFloatingButton />
         </div>
-        <AdminFloatingButton />
       </body>
     </html>
   );
