@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { put } from '@vercel/blob';
 
 /**
  * Handles image file uploads for product images.
- * Uploads to Vercel Blob storage and returns the public URL.
+ * Uploads to Vercel Blob storage via their REST API.
  *
  * Accepts: JPG, PNG, WebP, GIF (max 10MB)
  */
@@ -36,16 +35,38 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const token = process.env.BLOB_READ_WRITE_TOKEN;
+    if (!token) {
+      return NextResponse.json(
+        { error: 'Blob storage not configured. Add BLOB_READ_WRITE_TOKEN to environment variables.' },
+        { status: 500 }
+      );
+    }
+
     // Generate unique filename
     const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
     const timestamp = Date.now();
     const randomStr = Math.random().toString(36).substring(2, 8);
     const filename = `cards/${timestamp}-${randomStr}.${ext}`;
 
-    // Upload to Vercel Blob
-    const blob = await put(filename, file, {
-      access: 'public',
+    // Upload to Vercel Blob via REST API
+    const blobResponse = await fetch(`https://blob.vercel-storage.com/${filename}`, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'x-content-type': file.type,
+        'x-cache-control-max-age': '31536000',
+      },
+      body: file,
     });
+
+    if (!blobResponse.ok) {
+      const errText = await blobResponse.text();
+      console.error('Blob upload failed:', errText);
+      return NextResponse.json({ error: 'Upload to storage failed' }, { status: 500 });
+    }
+
+    const blob = await blobResponse.json();
 
     return NextResponse.json({ imageUrl: blob.url, filename });
   } catch (error: any) {

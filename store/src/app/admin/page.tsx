@@ -90,7 +90,7 @@ export default function AdminPage() {
       }));
 
       setLookupMessage(`✓ Found: ${data.card.name}${data.card.suggestedPrice ? ` (TCGPlayer market ~$${data.card.suggestedPrice})` : ''}`);
-    } catch {
+    } catch (e) {
       setLookupMessage('Lookup failed. Enter details manually.');
     }
 
@@ -140,7 +140,7 @@ export default function AdminPage() {
       const data = await res.json();
       setCards(data.cards || []);
       setShowInventory(true);
-    } catch {
+    } catch (e) {
       setMessage('Failed to load inventory');
     }
   };
@@ -152,7 +152,7 @@ export default function AdminPage() {
       if (res.ok) {
         setCards(cards.filter((c) => c.id !== id));
       }
-    } catch {
+    } catch (e) {
       alert('Failed to delete card');
     }
   };
@@ -193,7 +193,7 @@ export default function AdminPage() {
       setCards(cards.map((c) => (c.id === id ? data.card : c)));
       setEditingId(null);
       setEditForm({});
-    } catch {
+    } catch (e) {
       alert('Failed to update card');
     }
   };
@@ -533,6 +533,7 @@ export default function AdminPage() {
                 <tbody className="divide-y divide-gray-100">
                   {cards.map((card) => (
                     editingId === card.id ? (
+                      <>
                       <tr key={card.id} className="bg-yellow-50">
                         <td className="px-4 py-2">
                           <input type="text" value={editForm.sku} onChange={(e) => setEditForm({ ...editForm, sku: e.target.value })} className="w-full px-2 py-1 border rounded text-xs" placeholder="SKU" />
@@ -598,6 +599,7 @@ export default function AdminPage() {
                           </div>
                         </td>
                       </tr>
+                      </>
                     ) : (
                       <tr key={card.id} className="hover:bg-gray-50">
                         <td className="px-4 py-3 text-gray-500 text-xs font-mono">{card.sku || '—'}</td>
