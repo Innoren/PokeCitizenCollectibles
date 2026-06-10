@@ -560,6 +560,44 @@ export default function AdminPage() {
                           <button onClick={cancelEdit} className="text-gray-500 hover:text-gray-700 text-xs font-medium">Cancel</button>
                         </td>
                       </tr>
+                      <tr key={`${card.id}-image`} className="bg-yellow-50 border-t-0">
+                        <td colSpan={8} className="px-4 py-2">
+                          <div className="flex items-center gap-3">
+                            <label className="flex-shrink-0 px-3 py-1.5 bg-gray-100 border border-gray-300 rounded text-xs font-medium text-gray-700 cursor-pointer hover:bg-gray-200 transition-colors">
+                              📷 Upload
+                              <input
+                                type="file"
+                                accept="image/jpeg,image/png,image/webp,image/gif"
+                                className="hidden"
+                                onChange={async (e) => {
+                                  const file = e.target.files?.[0];
+                                  if (!file) return;
+                                  const fd = new FormData();
+                                  fd.append('file', file);
+                                  try {
+                                    const res = await fetch('/api/admin/upload', { method: 'POST', body: fd });
+                                    const data = await res.json();
+                                    if (!res.ok) throw new Error(data.error);
+                                    setEditForm((prev: any) => ({ ...prev, imageUrl: data.imageUrl }));
+                                  } catch (err: any) {
+                                    alert(err.message || 'Upload failed');
+                                  }
+                                }}
+                              />
+                            </label>
+                            <input
+                              type="text"
+                              value={editForm.imageUrl}
+                              onChange={(e) => setEditForm({ ...editForm, imageUrl: e.target.value })}
+                              placeholder="Image URL (paste or upload)"
+                              className="flex-1 px-2 py-1 border rounded text-sm"
+                            />
+                            {editForm.imageUrl && (
+                              <img src={editForm.imageUrl} alt="Preview" className="h-10 w-10 object-contain rounded border" />
+                            )}
+                          </div>
+                        </td>
+                      </tr>
                     ) : (
                       <tr key={card.id} className="hover:bg-gray-50">
                         <td className="px-4 py-3 text-gray-500 text-xs font-mono">{card.sku || '—'}</td>
