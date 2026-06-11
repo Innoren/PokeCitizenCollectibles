@@ -2,10 +2,10 @@ import { db } from '@/db';
 import { cards } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { notFound } from 'next/navigation';
-import Image from 'next/image';
 import Link from 'next/link';
 import { formatPrice, getRarityColor, getConditionColor } from '@/lib/utils';
 import AddToCartButton from './AddToCartButton';
+import ZoomableImage from '@/components/ZoomableImage';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,14 +46,7 @@ export default async function CardDetailPage({ params }: CardDetailPageProps) {
         <div className="relative">
           <div className="sticky top-24">
             <div className="relative aspect-[3/4] max-w-md mx-auto rounded-2xl overflow-hidden bg-gray-50 border border-gray-200 p-8">
-              <Image
-                src={card.imageUrl}
-                alt={card.name}
-                fill
-                className="object-contain p-4"
-                sizes="(max-width: 768px) 100vw, 50vw"
-                priority
-              />
+              <ZoomableImage src={card.imageUrl} alt={card.name} />
               {card.stock === 0 && (
                 <div className="absolute inset-0 bg-white/80 flex items-center justify-center z-10">
                   <span className="px-8 py-4 bg-red-600 text-white text-xl font-bold rounded-xl shadow-lg uppercase tracking-wide">Out of Stock</span>
