@@ -31,10 +31,10 @@ export default function CardItem({ card }: CardItemProps) {
     <Link href={`/shop/${card.id}`} className="group">
       <div className="relative bg-white rounded-xl border border-gray-200 overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
         {/* Image Container */}
-        <div className="relative aspect-[3/4] overflow-hidden bg-gray-50 p-3">
+        <div className="relative aspect-[3/4] overflow-hidden bg-gray-100 p-3">
           <div className="relative w-full h-full flex items-center justify-center">
             <Image
-              src={card.imageUrl}
+              src={card.imageUrl || '/pokemon-logo.svg'}
               alt={card.name}
               fill
               className="object-contain transition-transform duration-500 group-hover:scale-105"

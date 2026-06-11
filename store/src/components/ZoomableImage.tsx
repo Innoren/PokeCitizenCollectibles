@@ -12,6 +12,7 @@ export default function ZoomableImage({ src, alt }: ZoomableImageProps) {
   const [zoomed, setZoomed] = useState(false);
   const [position, setPosition] = useState({ x: 50, y: 50 });
   const containerRef = useRef<HTMLDivElement>(null);
+  const imageSrc = src || '/pokemon-logo.svg';
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!containerRef.current) return;
@@ -31,7 +32,7 @@ export default function ZoomableImage({ src, alt }: ZoomableImageProps) {
         onClick={() => setZoomed(true)}
       >
         <Image
-          src={src}
+          src={imageSrc}
           alt={alt}
           fill
           className="object-contain p-4 transition-transform duration-200"
@@ -58,7 +59,7 @@ export default function ZoomableImage({ src, alt }: ZoomableImageProps) {
           </button>
           <div className="relative w-full h-full max-w-3xl max-h-[90vh]">
             <Image
-              src={src}
+              src={imageSrc}
               alt={alt}
               fill
               className="object-contain"
