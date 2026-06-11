@@ -43,9 +43,11 @@ export default function Navbar() {
           <div className="flex items-center justify-between h-16 gap-4">
             {/* Logo */}
             <Link href="/" className="flex items-center gap-2 shrink-0">
-              <div className="w-10 h-10 rounded-full bg-white border-2 border-gray-900 flex items-center justify-center relative">
-                <div className="w-full h-[2px] bg-gray-900 absolute" />
-                <div className="w-4 h-4 rounded-full bg-white border-2 border-gray-900 z-10" />
+              <div className="w-10 h-10 rounded-full border-2 border-gray-900 flex items-center justify-center relative overflow-hidden">
+                <div className="absolute top-0 left-0 right-0 h-1/2 bg-red-500" />
+                <div className="absolute bottom-0 left-0 right-0 h-1/2 bg-white" />
+                <div className="w-full h-[2px] bg-gray-900 absolute z-10" />
+                <div className="w-4 h-4 rounded-full bg-white border-2 border-gray-900 z-20" />
               </div>
               <span className="text-xl font-bold text-gray-900 hidden sm:block">
                 PokeCitizen
