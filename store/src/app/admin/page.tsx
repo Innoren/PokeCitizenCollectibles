@@ -45,6 +45,7 @@ export default function AdminPage() {
   const [editForm, setEditForm] = useState<any>({});
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [perPage, setPerPage] = useState(50);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -136,9 +137,9 @@ export default function AdminPage() {
     }
   };
 
-  const loadInventory = async (page = 1) => {
+  const loadInventory = async (page = 1, limit = perPage) => {
     try {
-      const res = await fetch(`/api/cards?limit=50&page=${page}`);
+      const res = await fetch(`/api/cards?limit=${limit}&page=${page}`);
       const data = await res.json();
       setCards(data.cards || []);
       setCurrentPage(data.pagination?.page || 1);
@@ -628,9 +629,21 @@ export default function AdminPage() {
           {/* Pagination */}
           {totalPages > 1 && (
             <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200">
-              <p className="text-sm text-gray-500">
-                Page {currentPage} of {totalPages}
-              </p>
+              <div className="flex items-center gap-3">
+                <p className="text-sm text-gray-500">
+                  Page {currentPage} of {totalPages}
+                </p>
+                <select
+                  value={perPage}
+                  onChange={(e) => { const val = parseInt(e.target.value, 10); setPerPage(val); loadInventory(1, val); }}
+                  className="text-sm border border-gray-300 rounded-lg px-2 py-1"
+                >
+                  <option value={25}>25 per page</option>
+                  <option value={50}>50 per page</option>
+                  <option value={100}>100 per page</option>
+                  <option value={250}>250 per page</option>
+                </select>
+              </div>
               <div className="flex gap-2">
                 <button
                   onClick={() => loadInventory(currentPage - 1)}
