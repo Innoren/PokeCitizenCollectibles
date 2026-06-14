@@ -43,6 +43,8 @@ export default function AdminPage() {
   const [lookupMessage, setLookupMessage] = useState('');
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editForm, setEditForm] = useState<any>({});
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -134,11 +136,13 @@ export default function AdminPage() {
     }
   };
 
-  const loadInventory = async () => {
+  const loadInventory = async (page = 1) => {
     try {
-      const res = await fetch('/api/cards?limit=100');
+      const res = await fetch(`/api/cards?limit=50&page=${page}`);
       const data = await res.json();
       setCards(data.cards || []);
+      setCurrentPage(data.pagination?.page || 1);
+      setTotalPages(data.pagination?.totalPages || 1);
       setShowInventory(true);
     } catch (e) {
       setMessage('Failed to load inventory');
@@ -618,6 +622,31 @@ export default function AdminPage() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200">
+              <p className="text-sm text-gray-500">
+                Page {currentPage} of {totalPages}
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => loadInventory(currentPage - 1)}
+                  disabled={currentPage <= 1}
+                  className="px-3 py-1.5 text-sm font-medium border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  ← Previous
+                </button>
+                <button
+                  onClick={() => loadInventory(currentPage + 1)}
+                  disabled={currentPage >= totalPages}
+                  className="px-3 py-1.5 text-sm font-medium border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  Next →
+                </button>
+              </div>
             </div>
           )}
         </div>
