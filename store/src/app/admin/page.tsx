@@ -638,6 +638,7 @@ export default function AdminPage() {
                   onChange={(e) => { const val = parseInt(e.target.value, 10); setPerPage(val); loadInventory(1, val); }}
                   className="text-sm border border-gray-300 rounded-lg px-2 py-1"
                 >
+                  <option value={10}>10 per page</option>
                   <option value={25}>25 per page</option>
                   <option value={50}>50 per page</option>
                   <option value={100}>100 per page</option>
