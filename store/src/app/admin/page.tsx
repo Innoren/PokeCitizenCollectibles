@@ -240,7 +240,7 @@ export default function AdminPage() {
           Add New Card
         </button>
         <button
-          onClick={loadInventory}
+          onClick={() => loadInventory()}
           className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors ${
             showInventory
               ? 'border-pokemon-red text-pokemon-red'
