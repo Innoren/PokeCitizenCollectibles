@@ -46,6 +46,7 @@ export default function AdminPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [perPage, setPerPage] = useState(50);
+  const [searchTerm, setSearchTerm] = useState('');
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -137,9 +138,11 @@ export default function AdminPage() {
     }
   };
 
-  const loadInventory = async (page = 1, limit = perPage) => {
+  const loadInventory = async (page = 1, limit = perPage, search = searchTerm) => {
     try {
-      const res = await fetch(`/api/cards?limit=${limit}&page=${page}`);
+      let url = `/api/cards?limit=${limit}&page=${page}`;
+      if (search.trim()) url += `&search=${encodeURIComponent(search.trim())}`;
+      const res = await fetch(url);
       const data = await res.json();
       setCards(data.cards || []);
       setCurrentPage(data.pagination?.page || 1);
@@ -515,6 +518,35 @@ export default function AdminPage() {
       {/* Inventory View */}
       {showInventory && (
         <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+          {/* Search bar */}
+          <div className="p-4 border-b border-gray-200">
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') loadInventory(1, perPage, searchTerm); }}
+                placeholder="Search cards by name..."
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-pokemon-red/20 focus:border-pokemon-red outline-none transition-all"
+              />
+              <button
+                type="button"
+                onClick={() => loadInventory(1, perPage, searchTerm)}
+                className="px-4 py-2 bg-pokemon-red text-white text-sm font-medium rounded-lg hover:bg-red-600 transition-colors"
+              >
+                Search
+              </button>
+              {searchTerm && (
+                <button
+                  type="button"
+                  onClick={() => { setSearchTerm(''); loadInventory(1, perPage, ''); }}
+                  className="px-3 py-2 text-sm text-gray-500 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          </div>
           {cards.length === 0 ? (
             <div className="p-12 text-center text-gray-500">
               <p className="text-lg">No cards in inventory yet.</p>
@@ -615,6 +647,7 @@ export default function AdminPage() {
                         <td className="px-4 py-3 text-right text-gray-900 font-medium">${card.price}</td>
                         <td className="px-4 py-3 text-right text-gray-900">{card.stock}</td>
                         <td className="px-4 py-3 text-right space-x-2 whitespace-nowrap">
+                          <a href={`/shop/${card.id}`} target="_blank" className="text-green-500 hover:text-green-700 text-xs font-medium">View</a>
                           <button onClick={() => startEdit(card)} className="text-blue-500 hover:text-blue-700 text-xs font-medium">Edit</button>
                           <button onClick={() => deleteCard(card.id)} className="text-red-500 hover:text-red-700 text-xs font-medium">Delete</button>
                         </td>
