@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { formatPrice, getRarityColor, getConditionColor } from '@/lib/utils';
 import AddToCartButton from './AddToCartButton';
 import ZoomableImage from '@/components/ZoomableImage';
+import AdminEditButton from '@/components/AdminEditButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -124,6 +125,9 @@ export default async function CardDetailPage({ params }: CardDetailPageProps) {
 
           {/* Add to Cart */}
           <AddToCartButton card={card} />
+
+          {/* Admin quick edit */}
+          <AdminEditButton cardId={card.id} currentImageUrl={card.imageUrl} />
 
           {/* Trust badges */}
           <div className="flex items-center gap-6 pt-4 border-t border-gray-200">
