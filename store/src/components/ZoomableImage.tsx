@@ -12,7 +12,21 @@ export default function ZoomableImage({ src, alt }: ZoomableImageProps) {
   const [zoomed, setZoomed] = useState(false);
   const [position, setPosition] = useState({ x: 50, y: 50 });
   const containerRef = useRef<HTMLDivElement>(null);
-  const imageSrc = src || '/pokemon-logo.svg';
+  const imageSrc = src && src.trim() ? src : '';
+
+  if (!imageSrc) {
+    return (
+      <div className="flex flex-col items-center justify-center w-full h-full text-gray-400">
+        <svg viewBox="0 0 100 100" className="w-24 h-24 opacity-30">
+          <circle cx="50" cy="50" r="48" fill="#EF4444" opacity="0.3" />
+          <path d="M 2 50 A 48 48 0 0 0 98 50 Z" fill="#FFFFFF" />
+          <rect x="2" y="46" width="96" height="8" fill="#1F2937" opacity="0.3" />
+          <circle cx="50" cy="50" r="14" fill="#FFFFFF" stroke="#1F2937" strokeWidth="3" opacity="0.3" />
+        </svg>
+        <span className="text-sm mt-3">No image uploaded</span>
+      </div>
+    );
+  }
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!containerRef.current) return;

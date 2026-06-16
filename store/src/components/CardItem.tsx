@@ -33,13 +33,25 @@ export default function CardItem({ card }: CardItemProps) {
         {/* Image Container */}
         <div className="relative aspect-[3/4] overflow-hidden bg-gray-100 p-3">
           <div className="relative w-full h-full flex items-center justify-center">
-            <Image
-              src={card.imageUrl || '/pokemon-logo.svg'}
-              alt={card.name}
-              fill
-              className="object-contain transition-transform duration-500 group-hover:scale-105"
-              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
-            />
+            {card.imageUrl ? (
+              <Image
+                src={card.imageUrl}
+                alt={card.name}
+                fill
+                className="object-contain transition-transform duration-500 group-hover:scale-105"
+                sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
+              />
+            ) : (
+              <div className="flex flex-col items-center justify-center text-gray-400">
+                <svg viewBox="0 0 100 100" className="w-16 h-16 opacity-30">
+                  <circle cx="50" cy="50" r="48" fill="#EF4444" opacity="0.3" />
+                  <path d="M 2 50 A 48 48 0 0 0 98 50 Z" fill="#FFFFFF" />
+                  <rect x="2" y="46" width="96" height="8" fill="#1F2937" opacity="0.3" />
+                  <circle cx="50" cy="50" r="14" fill="#FFFFFF" stroke="#1F2937" strokeWidth="3" opacity="0.3" />
+                </svg>
+                <span className="text-xs mt-2">No image</span>
+              </div>
+            )}
           </div>
           {/* Stock indicator */}
           {card.stock <= 3 && card.stock > 0 && (
