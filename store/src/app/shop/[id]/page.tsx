@@ -46,7 +46,7 @@ export default async function CardDetailPage({ params }: CardDetailPageProps) {
         {/* Card Image */}
         <div className="relative">
           <div className="sticky top-24">
-            <div className="relative aspect-[3/4] max-w-md mx-auto rounded-2xl overflow-hidden bg-gray-50 border border-gray-200 p-8">
+            <div className="relative aspect-square max-w-lg mx-auto rounded-2xl overflow-hidden bg-gray-50 border border-gray-200 p-4">
               <ZoomableImage src={card.imageUrl} alt={card.name} />
               {card.stock === 0 && (
                 <div className="absolute inset-0 bg-white/80 flex items-center justify-center z-10">

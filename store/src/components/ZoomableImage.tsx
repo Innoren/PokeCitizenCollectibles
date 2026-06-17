@@ -49,7 +49,7 @@ export default function ZoomableImage({ src, alt }: ZoomableImageProps) {
           src={imageSrc}
           alt={alt}
           fill
-          className="object-contain p-4 transition-transform duration-200"
+          className="object-contain p-2 transition-transform duration-200"
           style={{
             transformOrigin: `${position.x}% ${position.y}%`,
           }}
