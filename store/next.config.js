@@ -4,11 +4,7 @@ const nextConfig = {
     remotePatterns: [
       {
         protocol: 'https',
-        hostname: 'images.pokemontcg.io',
-      },
-      {
-        protocol: 'https',
-        hostname: 'raw.githubusercontent.com',
+        hostname: '**',
       },
       {
         protocol: 'https',
