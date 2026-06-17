@@ -570,39 +570,41 @@ export default function AdminPage() {
                 <tbody className="divide-y divide-gray-100">
                   {cards.map((card) => (
                     editingId === card.id ? (
-                      <>
                       <tr key={card.id} className="bg-yellow-50">
-                        <td className="px-4 py-2">
-                          <input type="text" value={editForm.sku} onChange={(e) => setEditForm({ ...editForm, sku: e.target.value })} className="w-full px-2 py-1 border rounded text-xs" placeholder="SKU" />
-                        </td>
-                        <td className="px-4 py-2">
-                          <input type="text" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} className="w-full px-2 py-1 border rounded text-sm" />
-                        </td>
-                        <td className="px-4 py-2">
-                          <input type="text" value={editForm.setName} onChange={(e) => setEditForm({ ...editForm, setName: e.target.value })} className="w-full px-2 py-1 border rounded text-sm" />
-                        </td>
-                        <td className="px-4 py-2">
-                          <input type="text" value={editForm.rarity} onChange={(e) => setEditForm({ ...editForm, rarity: e.target.value })} className="w-full px-2 py-1 border rounded text-sm" />
-                        </td>
-                        <td className="px-4 py-2">
-                          <input type="text" value={editForm.condition} onChange={(e) => setEditForm({ ...editForm, condition: e.target.value })} className="w-full px-2 py-1 border rounded text-sm" />
-                        </td>
-                        <td className="px-4 py-2">
-                          <input type="number" value={editForm.price} onChange={(e) => setEditForm({ ...editForm, price: e.target.value })} className="w-20 px-2 py-1 border rounded text-sm text-right" step="0.01" />
-                        </td>
-                        <td className="px-4 py-2">
-                          <input type="number" value={editForm.stock} onChange={(e) => setEditForm({ ...editForm, stock: e.target.value })} className="w-16 px-2 py-1 border rounded text-sm text-right" min="0" />
-                        </td>
-                        <td className="px-4 py-2 text-right space-x-2 whitespace-nowrap">
-                          <button onClick={() => saveEdit(card.id)} className="text-green-600 hover:text-green-800 text-xs font-medium">Save</button>
-                          <button onClick={cancelEdit} className="text-gray-500 hover:text-gray-700 text-xs font-medium">Cancel</button>
-                        </td>
-                      </tr>
-                      <tr key={`${card.id}-image`} className="bg-yellow-50 border-t-0">
-                        <td colSpan={8} className="px-4 py-2">
-                          <div className="flex items-center gap-3">
+                        <td colSpan={8} className="px-4 py-3">
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+                            <div>
+                              <label className="text-xs text-gray-500">SKU</label>
+                              <input type="text" value={editForm.sku} onChange={(e) => setEditForm({ ...editForm, sku: e.target.value })} className="w-full px-2 py-1 border rounded text-sm" placeholder="SKU" />
+                            </div>
+                            <div>
+                              <label className="text-xs text-gray-500">Name</label>
+                              <input type="text" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} className="w-full px-2 py-1 border rounded text-sm" />
+                            </div>
+                            <div>
+                              <label className="text-xs text-gray-500">Set</label>
+                              <input type="text" value={editForm.setName} onChange={(e) => setEditForm({ ...editForm, setName: e.target.value })} className="w-full px-2 py-1 border rounded text-sm" />
+                            </div>
+                            <div>
+                              <label className="text-xs text-gray-500">Rarity</label>
+                              <input type="text" value={editForm.rarity} onChange={(e) => setEditForm({ ...editForm, rarity: e.target.value })} className="w-full px-2 py-1 border rounded text-sm" />
+                            </div>
+                            <div>
+                              <label className="text-xs text-gray-500">Condition</label>
+                              <input type="text" value={editForm.condition} onChange={(e) => setEditForm({ ...editForm, condition: e.target.value })} className="w-full px-2 py-1 border rounded text-sm" />
+                            </div>
+                            <div>
+                              <label className="text-xs text-gray-500">Price ($)</label>
+                              <input type="number" value={editForm.price} onChange={(e) => setEditForm({ ...editForm, price: e.target.value })} className="w-full px-2 py-1 border rounded text-sm" step="0.01" />
+                            </div>
+                            <div>
+                              <label className="text-xs text-gray-500">Stock</label>
+                              <input type="number" value={editForm.stock} onChange={(e) => setEditForm({ ...editForm, stock: e.target.value })} className="w-full px-2 py-1 border rounded text-sm" min="0" />
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3 mb-3">
                             <label className="flex-shrink-0 px-3 py-1.5 bg-gray-100 border border-gray-300 rounded text-xs font-medium text-gray-700 cursor-pointer hover:bg-gray-200 transition-colors">
-                              📷 Upload
+                              📷 Upload Image
                               <input
                                 type="file"
                                 accept="image/jpeg,image/png,image/webp,image/gif"
@@ -634,9 +636,12 @@ export default function AdminPage() {
                               <img src={editForm.imageUrl} alt="Preview" className="h-10 w-10 object-contain rounded border" />
                             )}
                           </div>
+                          <div className="flex gap-2">
+                            <button onClick={() => saveEdit(card.id)} className="px-4 py-1.5 bg-green-600 text-white text-xs font-medium rounded hover:bg-green-700">Save</button>
+                            <button onClick={cancelEdit} className="px-4 py-1.5 text-xs text-gray-600 border border-gray-300 rounded hover:bg-gray-50">Cancel</button>
+                          </div>
                         </td>
                       </tr>
-                      </>
                     ) : (
                       <tr key={card.id} className="hover:bg-gray-50">
                         <td className="px-4 py-3 text-gray-500 text-xs font-mono">{card.sku || '—'}</td>
