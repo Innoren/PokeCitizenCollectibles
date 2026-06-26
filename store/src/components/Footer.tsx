@@ -37,7 +37,7 @@ export default function Footer() {
             <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-4">Help</h3>
             <ul className="space-y-2">
               <li><span className="text-gray-400 text-sm">Shipping Info</span></li>
-              <li><span className="text-gray-400 text-sm">Returns & Refunds</span></li>
+              <li><Link href="/returns" className="text-gray-400 hover:text-white text-sm transition-colors">Returns & Refunds</Link></li>
               <li><span className="text-gray-400 text-sm">Card Grading Guide</span></li>
               <li><span className="text-gray-400 text-sm">Contact Us</span></li>
             </ul>
@@ -47,8 +47,8 @@ export default function Footer() {
           <div>
             <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-4">Policies</h3>
             <ul className="space-y-2">
-              <li><span className="text-gray-400 text-sm">✓ Free shipping over $50</span></li>
-              <li><span className="text-gray-400 text-sm">✓ 30-day returns</span></li>
+              <li><span className="text-gray-400 text-sm">✓ Free shipping over $200</span></li>
+              <li><span className="text-gray-400 text-sm">✓ All sales final</span></li>
               <li><span className="text-gray-400 text-sm">✓ Authenticity guaranteed</span></li>
               <li><span className="text-gray-400 text-sm">✓ Secure packaging</span></li>
             </ul>

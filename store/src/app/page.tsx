@@ -86,10 +86,10 @@ export default async function HomePage() {
             </div>
           </div>
           <div className="flex items-center gap-4 p-5 rounded-xl bg-white border border-gray-200">
-            <div className="text-3xl">⚡</div>
+            <div className="text-3xl">📦</div>
             <div>
-              <h3 className="text-gray-900 font-semibold text-sm">Fast Shipping</h3>
-              <p className="text-gray-500 text-xs mt-0.5">Ships within 24 hours, free over $50</p>
+              <h3 className="text-gray-900 font-semibold text-sm">Free Shipping</h3>
+              <p className="text-gray-500 text-xs mt-0.5">Free on orders over $200</p>
             </div>
           </div>
         </div>

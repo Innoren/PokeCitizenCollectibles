@@ -45,7 +45,7 @@ export default function CartPage() {
   }
 
   const totalPrice = getTotalPrice();
-  const shippingFree = totalPrice >= 50;
+  const shippingFree = totalPrice >= 200;
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -83,7 +83,7 @@ export default function CartPage() {
           </div>
           {!shippingFree && (
             <p className="text-sm text-gray-500">
-              Add {formatPrice(50 - totalPrice)} more for free shipping
+              Add {formatPrice(200 - totalPrice)} more for free shipping
             </p>
           )}
           <div className="border-t border-gray-700/50 pt-3 flex justify-between">

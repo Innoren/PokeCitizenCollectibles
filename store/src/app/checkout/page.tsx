@@ -76,7 +76,7 @@ export default function CheckoutPage() {
   }
 
   const totalPrice = getTotalPrice();
-  const shippingFree = totalPrice >= 50;
+  const shippingFree = totalPrice >= 200;
   const finalTotal = totalPrice + (shippingFree ? 0 : 4.99);
 
   return (

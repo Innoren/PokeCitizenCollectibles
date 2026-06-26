@@ -78,7 +78,7 @@ export default async function CardDetailPage({ params }: CardDetailPageProps) {
             <div className="text-3xl font-bold text-pokemon-red">
               {formatPrice(card.price)}
             </div>
-            <p className="text-gray-500 text-sm mt-1">+ Free shipping on orders over $50</p>
+            <p className="text-gray-500 text-sm mt-1">+ Free shipping on orders over $200</p>
           </div>
 
           {/* TCGPlayer Price Reference */}

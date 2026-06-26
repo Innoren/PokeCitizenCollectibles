@@ -42,7 +42,7 @@ export default function Hero() {
             {/* Subtitle */}
             <p className="text-base md:text-lg text-gray-600 max-w-2xl mx-auto mb-8">
               Authentic, graded cards from every generation. From Base Set classics
-              to the latest Scarlet & Violet releases.
+              to the latest modern set releases.
             </p>
 
             {/* CTA Buttons */}
@@ -73,11 +73,7 @@ export default function Hero() {
               </div>
               <div className="text-center">
                 <div className="text-2xl font-bold text-gray-900">Free</div>
-                <div className="text-xs text-gray-500 uppercase tracking-wide">Shipping $50+</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-gray-900">24hr</div>
-                <div className="text-xs text-gray-500 uppercase tracking-wide">Dispatch</div>
+                <div className="text-xs text-gray-500 uppercase tracking-wide">Shipping $200+</div>
               </div>
             </div>
           </div>
