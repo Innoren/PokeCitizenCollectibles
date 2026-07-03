@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Link from 'next/link';
 
 interface AnalyticsData {
   period: string;
@@ -54,31 +53,15 @@ export default function AnalyticsPage() {
     : 1;
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="p-6 md:p-10 max-w-6xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Sales Analytics</h1>
-          <p className="text-gray-500 mt-1">Track your store performance</p>
-        </div>
-        <div className="flex gap-2">
-          <Link
-            href="/admin"
-            className="px-4 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-all"
-          >
-            ← Inventory
-          </Link>
-          <Link
-            href="/"
-            className="px-4 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-all"
-          >
-            Store
-          </Link>
-        </div>
+      <div className="mb-6 mt-8 md:mt-0">
+        <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Sales Analytics</h1>
+        <p className="text-gray-500 mt-1">Track your store performance</p>
       </div>
 
       {/* Period selector */}
-      <div className="flex gap-1 mb-8 bg-gray-100 p-1 rounded-xl w-fit">
+      <div className="flex gap-1 mb-8 bg-gray-100 p-1 rounded-xl w-fit overflow-x-auto">
         {PERIODS.map((p) => (
           <button
             key={p.key}

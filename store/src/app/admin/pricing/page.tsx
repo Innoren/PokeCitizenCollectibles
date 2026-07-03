@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Link from 'next/link';
 
 interface PriceAlert {
   id: number;
@@ -61,11 +60,11 @@ export default function PricingPage() {
   const fairPriced = alerts.filter((a) => a.status === 'fair');
 
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="p-6 md:p-10 max-w-5xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex items-center justify-between mb-8 mt-8 md:mt-0">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Price Monitor</h1>
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Price Monitor</h1>
           <p className="text-gray-500 mt-1">
             Compare your prices to TCGPlayer market rates
           </p>
@@ -75,21 +74,13 @@ export default function PricingPage() {
             </p>
           )}
         </div>
-        <div className="flex gap-2">
-          <button
-            onClick={fetchPrices}
-            disabled={loading}
-            className="px-4 py-2 text-sm font-medium text-pokemon-red border border-pokemon-red/30 rounded-lg hover:bg-red-50 transition-all disabled:opacity-50"
-          >
-            {loading ? 'Checking...' : '↻ Refresh Prices'}
-          </button>
-          <Link
-            href="/admin"
-            className="px-4 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-all"
-          >
-            ← Inventory
-          </Link>
-        </div>
+        <button
+          onClick={fetchPrices}
+          disabled={loading}
+          className="px-4 py-2 text-sm font-medium text-pokemon-red border border-pokemon-red/30 rounded-lg hover:bg-red-50 transition-all disabled:opacity-50 whitespace-nowrap"
+        >
+          {loading ? 'Checking...' : '↻ Refresh'}
+        </button>
       </div>
 
       {loading ? (
