@@ -16,82 +16,98 @@ export default async function HomePage() {
       .orderBy(desc(cards.createdAt))
       .limit(8);
   } catch (e) {
-    // Database not set up yet — show empty state
     console.error('Failed to fetch cards:', e);
   }
 
   return (
-    <div>
+    <div className="bg-gray-50">
       <Hero />
 
-      {/* Featured Cards Section */}
+      {/* Category tiles — big and image-forward like Pokemon Center */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h2 className="text-xl md:text-2xl font-bold text-gray-900">
-              Featured Cards
-            </h2>
-            <p className="text-gray-500 text-sm mt-0.5">Latest additions to our collection</p>
-          </div>
-          <Link
-            href="/shop"
-            className="px-4 py-2 text-sm font-medium text-pokemon-red hover:bg-red-50 rounded-lg transition-all"
-          >
-            View All →
-          </Link>
-        </div>
-        <CardGrid cards={featuredCards} />
-      </section>
-
-      {/* Categories Section */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <h2 className="text-xl md:text-2xl font-bold text-gray-900 mb-6">
-          Shop by Rarity
+        <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mb-6 text-center">
+          Shop the Collection
         </h2>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[
-            { name: 'Common', color: 'bg-gray-100 border-gray-200 hover:border-gray-400', emoji: '⚪' },
-            { name: 'Uncommon', color: 'bg-green-50 border-green-200 hover:border-green-400', emoji: '🟢' },
-            { name: 'Rare', color: 'bg-blue-50 border-blue-200 hover:border-blue-400', emoji: '🔵' },
-            { name: 'Ultra Rare', color: 'bg-purple-50 border-purple-200 hover:border-purple-400', emoji: '🟣' },
-            { name: 'Secret Rare', color: 'bg-yellow-50 border-yellow-200 hover:border-yellow-400', emoji: '⭐' },
-          ].map((rarity) => (
+            { name: 'Single Cards', href: '/shop', emoji: '🎴', gradient: 'from-red-500 to-orange-400' },
+            { name: 'Sealed Product', href: '/shop?rarity=Sealed+Product', emoji: '📦', gradient: 'from-blue-500 to-cyan-400' },
+            { name: 'Ultra Rare', href: '/shop?rarity=Ultra+Rare', emoji: '✨', gradient: 'from-purple-500 to-pink-400' },
+            { name: 'Secret Rare', href: '/shop?rarity=Secret+Rare', emoji: '⭐', gradient: 'from-yellow-400 to-amber-500' },
+          ].map((cat) => (
             <Link
-              key={rarity.name}
-              href={`/shop?rarity=${encodeURIComponent(rarity.name)}`}
-              className={`rounded-xl p-5 border-2 ${rarity.color} hover:scale-[1.02] transition-all duration-200`}
+              key={cat.name}
+              href={cat.href}
+              className={`group relative overflow-hidden rounded-2xl bg-gradient-to-br ${cat.gradient} p-6 h-40 flex flex-col justify-between shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1`}
             >
-              <div className="text-2xl mb-2">{rarity.emoji}</div>
-              <div className="text-gray-800 font-semibold text-sm">{rarity.name}</div>
+              <div className="absolute -right-4 -bottom-4 text-8xl opacity-20 group-hover:scale-110 group-hover:opacity-30 transition-all duration-300">
+                {cat.emoji}
+              </div>
+              <span className="text-3xl">{cat.emoji}</span>
+              <div>
+                <p className="text-white font-bold text-lg leading-tight">{cat.name}</p>
+                <span className="text-white/80 text-sm font-medium">Shop now →</span>
+              </div>
             </Link>
           ))}
         </div>
       </section>
 
-      {/* Trust Section */}
+      {/* Featured Cards */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="flex items-end justify-between mb-6">
+          <div>
+            <h2 className="text-2xl md:text-3xl font-bold text-gray-900">New Arrivals</h2>
+            <p className="text-gray-500 text-sm mt-1">Freshly added to the store</p>
+          </div>
+          <Link
+            href="/shop"
+            className="px-5 py-2.5 text-sm font-semibold text-white bg-pokemon-red rounded-full hover:bg-red-600 transition-all whitespace-nowrap"
+          >
+            View All
+          </Link>
+        </div>
+        <CardGrid cards={featuredCards} />
+      </section>
+
+      {/* Promo banner strip */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="rounded-3xl bg-gradient-to-r from-gray-900 to-gray-800 overflow-hidden relative">
+          <div className="absolute -right-10 -top-10 w-64 h-64 bg-pokemon-red/20 rounded-full blur-3xl" />
+          <div className="absolute -left-10 -bottom-10 w-56 h-56 bg-blue-500/20 rounded-full blur-3xl" />
+          <div className="relative px-8 py-12 md:px-16 md:py-14 flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="text-center md:text-left">
+              <h3 className="text-2xl md:text-3xl font-bold text-white mb-2">
+                Free Shipping on Orders Over $50
+              </h3>
+              <p className="text-gray-300">Every card ships within 24 hours in protective packaging.</p>
+            </div>
+            <Link
+              href="/shop"
+              className="px-8 py-4 bg-pokemon-yellow text-gray-900 font-bold rounded-full hover:bg-yellow-300 transition-all whitespace-nowrap shrink-0"
+            >
+              Start Shopping
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* Trust badges */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="flex items-center gap-4 p-5 rounded-xl bg-white border border-gray-200">
-            <div className="text-3xl">🛡️</div>
-            <div>
-              <h3 className="text-gray-900 font-semibold text-sm">Authenticity Guaranteed</h3>
-              <p className="text-gray-500 text-xs mt-0.5">Every card verified before listing</p>
+          {[
+            { icon: '🛡️', title: 'Authenticity Guaranteed', desc: 'Every card verified before listing' },
+            { icon: '📦', title: 'Secure Packaging', desc: 'Sleeves and top loaders included' },
+            { icon: '⚡', title: 'Fast Shipping', desc: 'Ships within 24 hours, free over $50' },
+          ].map((item) => (
+            <div key={item.title} className="flex items-center gap-4 p-6 rounded-2xl bg-white border border-gray-200 hover:shadow-md transition-shadow">
+              <div className="text-3xl">{item.icon}</div>
+              <div>
+                <h3 className="text-gray-900 font-semibold">{item.title}</h3>
+                <p className="text-gray-500 text-sm mt-0.5">{item.desc}</p>
+              </div>
             </div>
-          </div>
-          <div className="flex items-center gap-4 p-5 rounded-xl bg-white border border-gray-200">
-            <div className="text-3xl">📦</div>
-            <div>
-              <h3 className="text-gray-900 font-semibold text-sm">Secure Packaging</h3>
-              <p className="text-gray-500 text-xs mt-0.5">Sleeves and top loaders included</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-4 p-5 rounded-xl bg-white border border-gray-200">
-            <div className="text-3xl">⚡</div>
-            <div>
-              <h3 className="text-gray-900 font-semibold text-sm">Fast Shipping</h3>
-              <p className="text-gray-500 text-xs mt-0.5">Ships within 24 hours, free over $50</p>
-            </div>
-          </div>
+          ))}
         </div>
       </section>
     </div>
