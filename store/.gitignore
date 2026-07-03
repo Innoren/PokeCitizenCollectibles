@@ -35,3 +35,6 @@ next-env.d.ts
 
 # drizzle
 /drizzle
+
+# database backups (may contain customer order PII — never commit)
+/backups
