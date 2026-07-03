@@ -165,6 +165,12 @@ export default function AdminPage() {
         </div>
         <div className="flex gap-2">
           <Link
+            href="/admin/pricing"
+            className="px-4 py-2 text-sm font-medium text-pokemon-red border border-pokemon-red/30 rounded-lg hover:bg-red-50 transition-all"
+          >
+            💰 Pricing
+          </Link>
+          <Link
             href="/admin/analytics"
             className="px-4 py-2 text-sm font-medium text-pokemon-red border border-pokemon-red/30 rounded-lg hover:bg-red-50 transition-all"
           >

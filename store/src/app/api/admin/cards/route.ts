@@ -71,3 +71,34 @@ export async function DELETE(request: NextRequest) {
     );
   }
 }
+
+// PATCH — Update a card's price (or other fields)
+export async function PATCH(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { id, price, stock, name } = body;
+
+    if (!id) {
+      return NextResponse.json({ error: 'Card ID is required' }, { status: 400 });
+    }
+
+    const updates: Record<string, any> = {};
+    if (price !== undefined) updates.price = String(price);
+    if (stock !== undefined) updates.stock = stock;
+    if (name !== undefined) updates.name = name;
+
+    if (Object.keys(updates).length === 0) {
+      return NextResponse.json({ error: 'No fields to update' }, { status: 400 });
+    }
+
+    await db.update(cards).set(updates).where(eq(cards.id, parseInt(id, 10)));
+
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    console.error('Error updating card:', error);
+    return NextResponse.json(
+      { error: error.message || 'Failed to update card' },
+      { status: 500 }
+    );
+  }
+}
