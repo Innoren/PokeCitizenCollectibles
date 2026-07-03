@@ -11,6 +11,7 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search');
     const rarity = searchParams.get('rarity');
     const condition = searchParams.get('condition');
+    const category = searchParams.get('category');
     const sort = searchParams.get('sort') || 'newest';
     const page = parseInt(searchParams.get('page') || '1', 10);
     const limit = parseInt(searchParams.get('limit') || '12', 10);
@@ -28,6 +29,10 @@ export async function GET(request: NextRequest) {
 
     if (condition && condition !== 'All') {
       conditions.push(eq(cards.condition, condition));
+    }
+
+    if (category && category !== 'All') {
+      conditions.push(eq(cards.category, category));
     }
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;

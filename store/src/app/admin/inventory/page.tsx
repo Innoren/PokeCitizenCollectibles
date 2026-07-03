@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { classifyProduct } from '@/lib/classify';
 
 interface ProductForm {
   sku: string;
@@ -103,6 +104,7 @@ export default function InventoryPage() {
           sku: form.sku || null,
           name: form.name,
           setName: form.setName,
+          productType: form.productType,
           rarity: form.rarity,
           condition: form.condition,
           price: form.price,
@@ -272,6 +274,27 @@ export default function InventoryPage() {
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pokemon-red/20 focus:border-pokemon-red outline-none">
                 {PRODUCT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
+              {/* Live auto-category preview */}
+              {(() => {
+                const detected = classifyProduct({
+                  name: form.name,
+                  productType: form.productType,
+                  rarity: form.rarity,
+                  condition: form.condition,
+                });
+                return (
+                  <p className="text-xs mt-2 flex items-center gap-1.5">
+                    <span className="text-gray-400">Auto-filed under:</span>
+                    <span className={`px-2 py-0.5 rounded-full font-medium ${
+                      detected === 'Sealed Product'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'bg-green-100 text-green-700'
+                    }`}>
+                      {detected === 'Sealed Product' ? '📦 Sealed Products' : '🎴 Single Cards'}
+                    </span>
+                  </p>
+                );
+              })()}
             </div>
 
             <div>

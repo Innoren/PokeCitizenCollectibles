@@ -125,8 +125,15 @@ export default function Navbar() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-1 h-12 text-sm font-medium whitespace-nowrap">
             <Link href="/shop" className="px-3 py-1.5 text-gray-700 hover:text-pokemon-red hover:bg-red-50 rounded-md transition-colors">
-              All Cards
+              All Products
             </Link>
+            <Link href="/shop?category=Single+Card" className="px-3 py-1.5 text-gray-700 hover:text-pokemon-red hover:bg-red-50 rounded-md transition-colors font-semibold">
+              Single Cards
+            </Link>
+            <Link href="/shop?category=Sealed+Product" className="px-3 py-1.5 text-gray-700 hover:text-pokemon-red hover:bg-red-50 rounded-md transition-colors font-semibold">
+              Sealed Products
+            </Link>
+            <span className="mx-2 text-gray-300">|</span>
             <Link href="/shop?rarity=Common" className="px-3 py-1.5 text-gray-700 hover:text-pokemon-red hover:bg-red-50 rounded-md transition-colors">
               Common
             </Link>
@@ -148,9 +155,6 @@ export default function Navbar() {
             </Link>
             <Link href="/shop?condition=Near+Mint" className="px-3 py-1.5 text-gray-700 hover:text-pokemon-red hover:bg-red-50 rounded-md transition-colors">
               Near Mint
-            </Link>
-            <Link href="/shop?rarity=Sealed+Product" className="px-3 py-1.5 text-gray-700 hover:text-pokemon-red hover:bg-red-50 rounded-md transition-colors">
-              Sealed Product
             </Link>
             <Link href="/shop?sort=price_desc" className="px-3 py-1.5 text-gray-700 hover:text-pokemon-red hover:bg-red-50 rounded-md transition-colors">
               Most Expensive
