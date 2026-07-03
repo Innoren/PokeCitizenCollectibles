@@ -20,8 +20,13 @@ export default async function CardDetailPage({ params }: CardDetailPageProps) {
     notFound();
   }
 
-  const result = await db.select().from(cards).where(eq(cards.id, cardId)).limit(1);
-  const card = result[0];
+  let card;
+  try {
+    const result = await db.select().from(cards).where(eq(cards.id, cardId)).limit(1);
+    card = result[0];
+  } catch (e) {
+    console.error('Card detail query failed:', e);
+  }
 
   if (!card) {
     notFound();
@@ -84,7 +89,7 @@ export default async function CardDetailPage({ params }: CardDetailPageProps) {
             <div className="text-3xl font-bold text-pokemon-red">
               {formatPrice(card.price)}
             </div>
-            <p className="text-gray-500 text-sm mt-1">+ Free shipping on orders over $50</p>
+            <p className="text-gray-500 text-sm mt-1">+ Free shipping on orders over $200</p>
           </div>
 
           {/* TCGPlayer Price Reference */}

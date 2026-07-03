@@ -52,21 +52,29 @@ export default async function ShopPage({ searchParams }: ShopPageProps) {
     default: orderBy = desc(cards.createdAt);
   }
 
-  const countResult = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(cards)
-    .where(whereClause);
+  let totalItems = 0;
+  let allCards: any[] = [];
 
-  const totalItems = Number(countResult[0].count);
+  try {
+    const countResult = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(cards)
+      .where(whereClause);
+
+    totalItems = Number(countResult[0].count);
+
+    allCards = await db
+      .select()
+      .from(cards)
+      .where(whereClause)
+      .orderBy(orderBy)
+      .limit(ITEMS_PER_PAGE)
+      .offset((currentPage - 1) * ITEMS_PER_PAGE);
+  } catch (e) {
+    console.error('Shop query failed:', e);
+  }
+
   const totalPages = Math.ceil(totalItems / ITEMS_PER_PAGE);
-
-  const allCards = await db
-    .select()
-    .from(cards)
-    .where(whereClause)
-    .orderBy(orderBy)
-    .limit(ITEMS_PER_PAGE)
-    .offset((currentPage - 1) * ITEMS_PER_PAGE);
 
   // Helper to build pagination links preserving all filters
   const buildQuery = (pageNum: number) =>

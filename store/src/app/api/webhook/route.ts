@@ -3,7 +3,7 @@ import { stripe } from '@/lib/stripe';
 import { db } from '@/db';
 import { orders, orderItems, cards } from '@/db/schema';
 import { eq } from 'drizzle-orm';
-import { resend, FROM_EMAIL } from '@/lib/resend';
+import { getResend, FROM_EMAIL } from '@/lib/resend';
 import { orderConfirmationEmail } from '@/lib/emails';
 import Stripe from 'stripe';
 
@@ -97,15 +97,19 @@ export async function POST(request: NextRequest) {
           items: itemsWithNames,
         });
 
-        await resend.emails.send({
-          from: FROM_EMAIL,
-          to: customerEmail,
-          subject: `Order Confirmed — #${order.id} | PokeCitizen Collectibles`,
-          html,
-          text,
-        });
-
-        console.log(`Confirmation email sent to ${customerEmail}`);
+        const resend = getResend();
+        if (resend) {
+          await resend.emails.send({
+            from: FROM_EMAIL,
+            to: customerEmail,
+            subject: `Order Confirmed — #${order.id} | PokeCitizen Collectibles`,
+            html,
+            text,
+          });
+          console.log(`Confirmation email sent to ${customerEmail}`);
+        } else {
+          console.log('RESEND_API_KEY not set — skipping confirmation email');
+        }
       } catch (emailError) {
         // Don't fail the webhook if email fails
         console.error('Failed to send confirmation email:', emailError);

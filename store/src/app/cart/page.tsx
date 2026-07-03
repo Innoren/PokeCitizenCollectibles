@@ -18,9 +18,9 @@ export default function CartPage() {
     return (
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="animate-pulse space-y-4">
-          <div className="h-8 bg-gray-800 rounded w-48" />
-          <div className="h-32 bg-gray-800 rounded" />
-          <div className="h-32 bg-gray-800 rounded" />
+          <div className="h-8 bg-gray-200 rounded w-48" />
+          <div className="h-32 bg-gray-200 rounded" />
+          <div className="h-32 bg-gray-200 rounded" />
         </div>
       </div>
     );
@@ -30,13 +30,13 @@ export default function CartPage() {
     return (
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16 text-center">
         <div className="text-6xl mb-6">🛒</div>
-        <h1 className="text-3xl font-bold text-white mb-4">Your Cart is Empty</h1>
-        <p className="text-gray-400 mb-8">
+        <h1 className="text-3xl font-bold text-gray-900 mb-4">Your Cart is Empty</h1>
+        <p className="text-gray-500 mb-8">
           Looks like you haven&apos;t added any cards yet. Start browsing our collection!
         </p>
         <Link
           href="/shop"
-          className="inline-flex px-6 py-3 bg-gradient-to-r from-pokemon-yellow to-pokemon-gold text-gray-900 font-bold rounded-xl hover:shadow-lg hover:shadow-pokemon-yellow/25 transition-all"
+          className="inline-flex px-6 py-3 bg-pokemon-red text-white font-bold rounded-xl hover:bg-red-600 transition-all"
         >
           Browse Cards
         </Link>
@@ -45,15 +45,15 @@ export default function CartPage() {
   }
 
   const totalPrice = getTotalPrice();
-  const shippingFree = totalPrice >= 50;
+  const shippingFree = totalPrice >= 200;
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="flex items-center justify-between mb-8">
-        <h1 className="text-3xl font-bold text-white">Shopping Cart</h1>
+        <h1 className="text-3xl font-bold text-gray-900">Shopping Cart</h1>
         <button
           onClick={clearCart}
-          className="text-sm text-red-400 hover:text-red-300 transition-colors"
+          className="text-sm text-red-500 hover:text-red-600 transition-colors"
         >
           Clear Cart
         </button>
@@ -67,28 +67,28 @@ export default function CartPage() {
       </div>
 
       {/* Order Summary */}
-      <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
-        <h2 className="text-xl font-bold text-white mb-4">Order Summary</h2>
+      <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+        <h2 className="text-xl font-bold text-gray-900 mb-4">Order Summary</h2>
 
         <div className="space-y-3 mb-6">
-          <div className="flex justify-between text-gray-400">
+          <div className="flex justify-between text-gray-500">
             <span>Subtotal</span>
-            <span className="text-white">{formatPrice(totalPrice)}</span>
+            <span className="text-gray-900">{formatPrice(totalPrice)}</span>
           </div>
-          <div className="flex justify-between text-gray-400">
+          <div className="flex justify-between text-gray-500">
             <span>Shipping</span>
-            <span className={shippingFree ? 'text-green-400' : 'text-white'}>
+            <span className={shippingFree ? 'text-green-600 font-medium' : 'text-gray-900'}>
               {shippingFree ? 'FREE' : '$4.99'}
             </span>
           </div>
           {!shippingFree && (
-            <p className="text-sm text-gray-500">
-              Add {formatPrice(50 - totalPrice)} more for free shipping
+            <p className="text-sm text-gray-400">
+              Add {formatPrice(200 - totalPrice)} more for free shipping
             </p>
           )}
-          <div className="border-t border-gray-700/50 pt-3 flex justify-between">
-            <span className="text-white font-semibold">Total</span>
-            <span className="text-xl font-bold bg-gradient-to-r from-pokemon-yellow to-pokemon-gold bg-clip-text text-transparent">
+          <div className="border-t border-gray-200 pt-3 flex justify-between">
+            <span className="text-gray-900 font-semibold">Total</span>
+            <span className="text-xl font-bold text-pokemon-red">
               {formatPrice(totalPrice + (shippingFree ? 0 : 4.99))}
             </span>
           </div>
@@ -96,14 +96,14 @@ export default function CartPage() {
 
         <Link
           href="/checkout"
-          className="block w-full py-4 text-center bg-gradient-to-r from-pokemon-yellow to-pokemon-gold text-gray-900 font-bold rounded-xl hover:shadow-lg hover:shadow-pokemon-yellow/25 transition-all hover:scale-[1.01]"
+          className="block w-full py-4 text-center bg-pokemon-red text-white font-bold rounded-xl hover:bg-red-600 transition-all hover:scale-[1.01]"
         >
           Proceed to Checkout
         </Link>
 
         <Link
           href="/shop"
-          className="block w-full py-3 text-center text-gray-400 hover:text-white transition-colors mt-3"
+          className="block w-full py-3 text-center text-gray-500 hover:text-gray-900 transition-colors mt-3"
         >
           ← Continue Shopping
         </Link>
