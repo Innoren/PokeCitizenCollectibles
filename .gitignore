@@ -7,3 +7,5 @@ __pycache__/
 *.log
 public/uploads/
 PokeCitizenCollectibles/
+.vercel
+.env*
