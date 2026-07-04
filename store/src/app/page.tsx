@@ -21,31 +21,81 @@ export default async function HomePage() {
   }
 
   return (
-    <div>
+    <div className="bg-gray-50/60">
       <Hero />
 
-      {/* Featured Cards Section */}
+      {/* Colorful category tiles — Pokemon Center style */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="flex items-center justify-between mb-6">
+        <h2 className="text-2xl md:text-3xl font-extrabold text-gray-900 mb-6 text-center">
+          Shop the Collection
+        </h2>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {[
+            { name: 'Single Cards', href: '/shop', emoji: '🎴', gradient: 'from-red-500 to-orange-400' },
+            { name: 'Sealed Product', href: '/shop?rarity=Sealed+Product', emoji: '📦', gradient: 'from-blue-500 to-cyan-400' },
+            { name: 'Ultra Rare', href: '/shop?rarity=Ultra+Rare', emoji: '✨', gradient: 'from-purple-500 to-fuchsia-400' },
+            { name: 'Secret Rare', href: '/shop?rarity=Secret+Rare', emoji: '⭐', gradient: 'from-amber-400 to-yellow-500' },
+          ].map((cat) => (
+            <Link
+              key={cat.name}
+              href={cat.href}
+              className={`group relative overflow-hidden rounded-3xl bg-gradient-to-br ${cat.gradient} p-6 h-44 flex flex-col justify-between shadow-md hover:shadow-2xl transition-all duration-300 hover:-translate-y-1.5`}
+            >
+              <div className="absolute -right-5 -bottom-5 text-9xl opacity-20 group-hover:scale-110 group-hover:opacity-30 transition-all duration-300">
+                {cat.emoji}
+              </div>
+              <span className="text-4xl drop-shadow-sm">{cat.emoji}</span>
+              <div>
+                <p className="text-white font-extrabold text-xl leading-tight drop-shadow">{cat.name}</p>
+                <span className="text-white/90 text-sm font-semibold">Shop now →</span>
+              </div>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      {/* Featured Cards / New Arrivals */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="flex items-end justify-between mb-6">
           <div>
-            <h2 className="text-xl md:text-2xl font-bold text-gray-900">
-              Featured Cards
-            </h2>
-            <p className="text-gray-500 text-sm mt-0.5">Latest additions to our collection</p>
+            <h2 className="text-2xl md:text-3xl font-extrabold text-gray-900">New Arrivals</h2>
+            <p className="text-gray-500 text-sm mt-1">Freshly added to the store</p>
           </div>
           <Link
             href="/shop"
-            className="px-4 py-2 text-sm font-medium text-pokemon-red hover:bg-red-50 rounded-lg transition-all"
+            className="px-5 py-2.5 text-sm font-bold text-white bg-pokemon-red rounded-full hover:bg-red-600 transition-all whitespace-nowrap shadow-sm hover:shadow-md"
           >
-            View All →
+            View All
           </Link>
         </div>
         <CardGrid cards={featuredCards} />
       </section>
 
-      {/* Categories Section */}
+      {/* Promo banner strip */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="rounded-3xl bg-gradient-to-r from-gray-900 to-gray-800 overflow-hidden relative">
+          <div className="absolute -right-10 -top-10 w-64 h-64 bg-pokemon-red/25 rounded-full blur-3xl" />
+          <div className="absolute -left-10 -bottom-10 w-56 h-56 bg-pokemon-blue/25 rounded-full blur-3xl" />
+          <div className="relative px-8 py-12 md:px-16 md:py-14 flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="text-center md:text-left">
+              <h3 className="text-2xl md:text-3xl font-extrabold text-white mb-2">
+                Free Shipping on Orders Over $200
+              </h3>
+              <p className="text-gray-300">Every order ships in protective sleeves and top loaders.</p>
+            </div>
+            <Link
+              href="/shop"
+              className="px-8 py-4 bg-pokemon-yellow text-gray-900 font-extrabold rounded-full hover:bg-yellow-300 transition-all whitespace-nowrap shrink-0 hover:scale-105"
+            >
+              Start Shopping
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* Shop by Rarity */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <h2 className="text-xl md:text-2xl font-bold text-gray-900 mb-6">
+        <h2 className="text-2xl md:text-3xl font-extrabold text-gray-900 mb-6 text-center">
           Shop by Rarity
         </h2>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
@@ -59,39 +109,31 @@ export default async function HomePage() {
             <Link
               key={rarity.name}
               href={`/shop?rarity=${encodeURIComponent(rarity.name)}`}
-              className={`rounded-xl p-5 border-2 ${rarity.color} hover:scale-[1.02] transition-all duration-200`}
+              className={`rounded-2xl p-5 border-2 ${rarity.color} hover:scale-[1.03] transition-all duration-200 text-center`}
             >
-              <div className="text-2xl mb-2">{rarity.emoji}</div>
-              <div className="text-gray-800 font-semibold text-sm">{rarity.name}</div>
+              <div className="text-3xl mb-2">{rarity.emoji}</div>
+              <div className="text-gray-800 font-bold text-sm">{rarity.name}</div>
             </Link>
           ))}
         </div>
       </section>
 
-      {/* Trust Section */}
+      {/* Trust badges */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="flex items-center gap-4 p-5 rounded-xl bg-white border border-gray-200">
-            <div className="text-3xl">🛡️</div>
-            <div>
-              <h3 className="text-gray-900 font-semibold text-sm">Authenticity Guaranteed</h3>
-              <p className="text-gray-500 text-xs mt-0.5">Every card verified before listing</p>
+          {[
+            { icon: '🛡️', title: 'Authenticity Guaranteed', desc: 'Every card verified before listing' },
+            { icon: '📦', title: 'Secure Packaging', desc: 'Sleeves and top loaders included' },
+            { icon: '🚚', title: 'Free Shipping', desc: 'Free on orders over $200' },
+          ].map((item) => (
+            <div key={item.title} className="flex items-center gap-4 p-5 rounded-2xl bg-white border border-gray-200 hover:shadow-md transition-shadow">
+              <div className="text-3xl">{item.icon}</div>
+              <div>
+                <h3 className="text-gray-900 font-bold text-sm">{item.title}</h3>
+                <p className="text-gray-500 text-xs mt-0.5">{item.desc}</p>
+              </div>
             </div>
-          </div>
-          <div className="flex items-center gap-4 p-5 rounded-xl bg-white border border-gray-200">
-            <div className="text-3xl">📦</div>
-            <div>
-              <h3 className="text-gray-900 font-semibold text-sm">Secure Packaging</h3>
-              <p className="text-gray-500 text-xs mt-0.5">Sleeves and top loaders included</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-4 p-5 rounded-xl bg-white border border-gray-200">
-            <div className="text-3xl">📦</div>
-            <div>
-              <h3 className="text-gray-900 font-semibold text-sm">Free Shipping</h3>
-              <p className="text-gray-500 text-xs mt-0.5">Free on orders over $200</p>
-            </div>
-          </div>
+          ))}
         </div>
       </section>
     </div>

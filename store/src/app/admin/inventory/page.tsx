@@ -44,6 +44,8 @@ export default function InventoryPage() {
   const [search, setSearch] = useState('');
   const [editingStock, setEditingStock] = useState<number | null>(null);
   const [stockValue, setStockValue] = useState('');
+  const [editingPrice, setEditingPrice] = useState<number | null>(null);
+  const [priceValue, setPriceValue] = useState('');
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -161,6 +163,23 @@ export default function InventoryPage() {
       alert('Failed to update stock');
     }
     setEditingStock(null);
+  };
+
+  const savePrice = async (id: number) => {
+    const newPrice = parseFloat(priceValue);
+    if (isNaN(newPrice) || newPrice <= 0) { setEditingPrice(null); return; }
+    const formatted = newPrice.toFixed(2);
+    try {
+      await fetch('/api/admin/cards', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, price: formatted }),
+      });
+      setCards(cards.map((c) => (c.id === id ? { ...c, price: formatted } : c)));
+    } catch {
+      alert('Failed to update price');
+    }
+    setEditingPrice(null);
   };
 
   const filtered = cards.filter((c) =>
@@ -393,7 +412,32 @@ export default function InventoryPage() {
                         </td>
                         <td className="px-4 py-3 text-gray-600 hidden md:table-cell">{card.setName}</td>
                         <td className="px-4 py-3 text-gray-600 hidden md:table-cell">{card.rarity}</td>
-                        <td className="px-4 py-3 text-right text-gray-900 font-medium">${card.price}</td>
+                        <td className="px-4 py-3 text-right">
+                          {editingPrice === card.id ? (
+                            <div className="flex items-center justify-end gap-0.5">
+                              <span className="text-gray-500">$</span>
+                              <input
+                                type="number"
+                                value={priceValue}
+                                onChange={(e) => setPriceValue(e.target.value)}
+                                onBlur={() => savePrice(card.id)}
+                                onKeyDown={(e) => { if (e.key === 'Enter') savePrice(card.id); if (e.key === 'Escape') setEditingPrice(null); }}
+                                autoFocus
+                                min="0.01"
+                                step="0.01"
+                                className="w-20 px-2 py-1 border border-pokemon-red rounded text-right outline-none"
+                              />
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => { setEditingPrice(card.id); setPriceValue(String(card.price)); }}
+                              className="text-gray-900 font-medium hover:ring-2 hover:ring-pokemon-red/30 rounded px-2 py-1"
+                              title="Click to edit price"
+                            >
+                              ${card.price}
+                            </button>
+                          )}
+                        </td>
                         <td className="px-4 py-3 text-center">
                           {editingStock === card.id ? (
                             <input
@@ -434,7 +478,7 @@ export default function InventoryPage() {
           </div>
           {filtered.length > 0 && (
             <p className="text-xs text-gray-400 mt-3 text-center">
-              Tip: click any stock number to edit it inline
+              Tip: click any price or stock number to edit it inline
             </p>
           )}
         </div>
