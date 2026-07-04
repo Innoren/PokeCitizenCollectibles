@@ -15,6 +15,9 @@ interface PriceAlert {
   marketPrice: number | null;
   difference: string;
   status: 'above' | 'below' | 'fair';
+  autoPrice: boolean;
+  priceMarkup: string;
+  lastPriceSync: string | null;
 }
 
 export async function GET() {
@@ -65,6 +68,9 @@ export async function GET() {
           marketPrice,
           difference: `${diff > 0 ? '+' : ''}${diff.toFixed(1)}%`,
           status,
+          autoPrice: card.autoPrice,
+          priceMarkup: card.priceMarkup || '10.00',
+          lastPriceSync: card.lastPriceSync ? card.lastPriceSync.toISOString() : null,
         });
       } catch {
         continue;
