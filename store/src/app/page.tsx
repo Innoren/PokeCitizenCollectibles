@@ -20,9 +20,11 @@ export default async function HomePage() {
     console.error('Failed to fetch cards:', e);
   }
 
+  const spotlight = featuredCards.find((c) => c.imageUrl) || featuredCards[0] || null;
+
   return (
     <div className="bg-gray-50/60">
-      <Hero />
+      <Hero featured={spotlight} />
 
       {/* Colorful category tiles — Pokemon Center style */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
