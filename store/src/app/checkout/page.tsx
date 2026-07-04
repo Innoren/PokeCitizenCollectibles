@@ -52,8 +52,8 @@ export default function CheckoutPage() {
     return (
       <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="animate-pulse space-y-4">
-          <div className="h-8 bg-gray-200 rounded w-48" />
-          <div className="h-64 bg-gray-200 rounded" />
+          <div className="h-8 bg-gray-800 rounded w-48" />
+          <div className="h-64 bg-gray-800 rounded" />
         </div>
       </div>
     );
@@ -63,11 +63,11 @@ export default function CheckoutPage() {
     return (
       <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-16 text-center">
         <div className="text-6xl mb-6">🛒</div>
-        <h1 className="text-3xl font-bold text-gray-900 mb-4">Nothing to Checkout</h1>
-        <p className="text-gray-500 mb-8">Add some cards to your cart first!</p>
+        <h1 className="text-3xl font-bold text-white mb-4">Nothing to Checkout</h1>
+        <p className="text-gray-400 mb-8">Add some cards to your cart first!</p>
         <Link
           href="/shop"
-          className="inline-flex px-6 py-3 bg-pokemon-red text-white font-bold rounded-xl hover:bg-red-600 transition-all"
+          className="inline-flex px-6 py-3 bg-gradient-to-r from-pokemon-yellow to-pokemon-gold text-gray-900 font-bold rounded-xl hover:shadow-lg hover:shadow-pokemon-yellow/25 transition-all"
         >
           Browse Cards
         </Link>
@@ -76,44 +76,44 @@ export default function CheckoutPage() {
   }
 
   const totalPrice = getTotalPrice();
-  const shippingFree = totalPrice >= 200;
+  const shippingFree = totalPrice >= 50;
   const finalTotal = totalPrice + (shippingFree ? 0 : 4.99);
 
   return (
     <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <h1 className="text-3xl font-bold text-gray-900 mb-8">Checkout</h1>
+      <h1 className="text-3xl font-bold text-white mb-8">Checkout</h1>
 
       {/* Order Review */}
-      <div className="bg-white border border-gray-200 rounded-xl p-6 mb-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Order Review</h2>
+      <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6 mb-6">
+        <h2 className="text-lg font-semibold text-white mb-4">Order Review</h2>
 
         <div className="space-y-3 mb-6">
           {items.map((item) => (
             <div key={item.id} className="flex justify-between text-sm">
-              <span className="text-gray-600">
+              <span className="text-gray-300">
                 {item.name} × {item.quantity}
               </span>
-              <span className="text-gray-900">
+              <span className="text-white">
                 {formatPrice(parseFloat(item.price) * item.quantity)}
               </span>
             </div>
           ))}
         </div>
 
-        <div className="border-t border-gray-200 pt-4 space-y-2">
-          <div className="flex justify-between text-sm text-gray-500">
+        <div className="border-t border-gray-700/50 pt-4 space-y-2">
+          <div className="flex justify-between text-sm text-gray-400">
             <span>Subtotal</span>
             <span>{formatPrice(totalPrice)}</span>
           </div>
-          <div className="flex justify-between text-sm text-gray-500">
+          <div className="flex justify-between text-sm text-gray-400">
             <span>Shipping</span>
-            <span className={shippingFree ? 'text-green-600 font-medium' : ''}>
+            <span className={shippingFree ? 'text-green-400' : ''}>
               {shippingFree ? 'FREE' : '$4.99'}
             </span>
           </div>
-          <div className="flex justify-between text-lg font-bold pt-2 border-t border-gray-200">
-            <span className="text-gray-900">Total</span>
-            <span className="text-pokemon-red">
+          <div className="flex justify-between text-lg font-bold pt-2 border-t border-gray-700/50">
+            <span className="text-white">Total</span>
+            <span className="bg-gradient-to-r from-pokemon-yellow to-pokemon-gold bg-clip-text text-transparent">
               {formatPrice(finalTotal)}
             </span>
           </div>
@@ -123,7 +123,7 @@ export default function CheckoutPage() {
       {/* Stripe Checkout Button */}
       <div className="space-y-4">
         {error && (
-          <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm">
+          <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm">
             {error}
           </div>
         )}
@@ -131,11 +131,11 @@ export default function CheckoutPage() {
         <button
           onClick={handleCheckout}
           disabled={loading}
-          className="w-full py-4 bg-pokemon-red text-white font-bold rounded-xl hover:bg-red-600 transition-all hover:scale-[1.01] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+          className="w-full py-4 bg-gradient-to-r from-pokemon-yellow to-pokemon-gold text-gray-900 font-bold rounded-xl hover:shadow-lg hover:shadow-pokemon-yellow/25 transition-all hover:scale-[1.01] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
         >
           {loading ? (
             <span className="flex items-center justify-center gap-2">
-              <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              <div className="w-5 h-5 border-2 border-gray-900/30 border-t-gray-900 rounded-full animate-spin" />
               Processing...
             </span>
           ) : (
@@ -149,7 +149,7 @@ export default function CheckoutPage() {
 
         <Link
           href="/cart"
-          className="block text-center text-gray-500 hover:text-gray-900 transition-colors text-sm"
+          className="block text-center text-gray-400 hover:text-white transition-colors text-sm"
         >
           ← Back to Cart
         </Link>

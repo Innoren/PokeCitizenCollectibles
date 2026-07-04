@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { classifyProduct } from '@/lib/classify';
 
 interface ProductForm {
   sku: string;
@@ -43,10 +42,8 @@ export default function InventoryPage() {
 
   const [cards, setCards] = useState<any[]>([]);
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'in' | 'low' | 'out'>('all');
-  const [savingId, setSavingId] = useState<number | null>(null);
-  const [editingPrice, setEditingPrice] = useState<number | null>(null);
-  const [priceValue, setPriceValue] = useState('');
+  const [editingStock, setEditingStock] = useState<number | null>(null);
+  const [stockValue, setStockValue] = useState('');
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -104,7 +101,6 @@ export default function InventoryPage() {
           sku: form.sku || null,
           name: form.name,
           setName: form.setName,
-          productType: form.productType,
           rarity: form.rarity,
           condition: form.condition,
           price: form.price,
@@ -151,62 +147,27 @@ export default function InventoryPage() {
     }
   };
 
-  // Set stock to an exact value (used by +/- steppers and direct input)
-  const setStock = async (id: number, newStock: number) => {
-    if (isNaN(newStock) || newStock < 0) return;
-    // Optimistic update
-    setCards((prev) => prev.map((c) => (c.id === id ? { ...c, stock: newStock } : c)));
-    setSavingId(id);
+  const saveStock = async (id: number) => {
+    const newStock = parseInt(stockValue, 10);
+    if (isNaN(newStock) || newStock < 0) { setEditingStock(null); return; }
     try {
       await fetch('/api/admin/cards', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, stock: newStock }),
       });
+      setCards(cards.map((c) => (c.id === id ? { ...c, stock: newStock } : c)));
     } catch {
       alert('Failed to update stock');
-      loadInventory();
     }
-    setSavingId(null);
+    setEditingStock(null);
   };
 
-  const savePrice = async (id: number) => {
-    const newPrice = parseFloat(priceValue);
-    if (isNaN(newPrice) || newPrice <= 0) { setEditingPrice(null); return; }
-    setCards((prev) => prev.map((c) => (c.id === id ? { ...c, price: newPrice.toFixed(2) } : c)));
-    setEditingPrice(null);
-    try {
-      await fetch('/api/admin/cards', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, price: newPrice.toFixed(2) }),
-      });
-    } catch {
-      alert('Failed to update price');
-      loadInventory();
-    }
-  };
-
-  const matchesSearch = (c: any) =>
+  const filtered = cards.filter((c) =>
     c.name.toLowerCase().includes(search.toLowerCase()) ||
     c.setName.toLowerCase().includes(search.toLowerCase()) ||
-    (c.sku || '').toLowerCase().includes(search.toLowerCase());
-
-  const matchesStatus = (c: any) =>
-    statusFilter === 'all' ? true :
-    statusFilter === 'out' ? c.stock === 0 :
-    statusFilter === 'low' ? c.stock > 0 && c.stock <= 3 :
-    c.stock > 3;
-
-  const filtered = cards.filter((c) => matchesSearch(c) && matchesStatus(c));
-
-  // Counts for filter chips
-  const counts = {
-    all: cards.length,
-    in: cards.filter((c) => c.stock > 3).length,
-    low: cards.filter((c) => c.stock > 0 && c.stock <= 3).length,
-    out: cards.filter((c) => c.stock === 0).length,
-  };
+    (c.sku || '').toLowerCase().includes(search.toLowerCase())
+  );
 
   return (
     <div className="p-6 md:p-10 max-w-5xl mx-auto">
@@ -274,27 +235,6 @@ export default function InventoryPage() {
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pokemon-red/20 focus:border-pokemon-red outline-none">
                 {PRODUCT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
-              {/* Live auto-category preview */}
-              {(() => {
-                const detected = classifyProduct({
-                  name: form.name,
-                  productType: form.productType,
-                  rarity: form.rarity,
-                  condition: form.condition,
-                });
-                return (
-                  <p className="text-xs mt-2 flex items-center gap-1.5">
-                    <span className="text-gray-400">Auto-filed under:</span>
-                    <span className={`px-2 py-0.5 rounded-full font-medium ${
-                      detected === 'Sealed Product'
-                        ? 'bg-blue-100 text-blue-700'
-                        : 'bg-green-100 text-green-700'
-                    }`}>
-                      {detected === 'Sealed Product' ? '📦 Sealed Products' : '🎴 Single Cards'}
-                    </span>
-                  </p>
-                );
-              })()}
             </div>
 
             <div>
@@ -413,171 +353,88 @@ export default function InventoryPage() {
       {/* MANAGE TAB */}
       {tab === 'manage' && (
         <div>
-          {/* Search */}
           <div className="mb-4">
-            <div className="relative">
-              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search by name, set, or SKU..."
-                className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-pokemon-red/20 focus:border-pokemon-red outline-none"
-              />
-            </div>
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by name, set, or SKU..."
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pokemon-red/20 focus:border-pokemon-red outline-none"
+            />
           </div>
 
-          {/* Status filter chips */}
-          <div className="flex flex-wrap gap-2 mb-5">
-            {([
-              { key: 'all', label: 'All Products' },
-              { key: 'in', label: 'In Stock' },
-              { key: 'low', label: 'Low Stock' },
-              { key: 'out', label: 'Out of Stock' },
-            ] as const).map((chip) => {
-              const active = statusFilter === chip.key;
-              return (
-                <button
-                  key={chip.key}
-                  onClick={() => setStatusFilter(chip.key)}
-                  className={`px-4 py-2 rounded-full text-sm font-medium border transition-all ${
-                    active
-                      ? 'bg-pokemon-red text-white border-pokemon-red'
-                      : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
-                  }`}
-                >
-                  {chip.label}
-                  <span className={`ml-2 px-1.5 py-0.5 rounded-full text-xs ${
-                    active ? 'bg-white/20' : 'bg-gray-100'
-                  }`}>
-                    {counts[chip.key]}
-                  </span>
-                </button>
-              );
-            })}
+          <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+            {filtered.length === 0 ? (
+              <div className="p-12 text-center text-gray-500">
+                <p className="text-lg">{cards.length === 0 ? 'No products yet.' : 'No matches found.'}</p>
+                <p className="text-sm mt-1">
+                  {cards.length === 0 ? 'Add your first product using the Add Product tab.' : 'Try a different search.'}
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <th className="text-left px-4 py-3 font-medium text-gray-600">Product</th>
+                      <th className="text-left px-4 py-3 font-medium text-gray-600 hidden md:table-cell">Set</th>
+                      <th className="text-left px-4 py-3 font-medium text-gray-600 hidden md:table-cell">Rarity</th>
+                      <th className="text-right px-4 py-3 font-medium text-gray-600">Price</th>
+                      <th className="text-center px-4 py-3 font-medium text-gray-600">Stock</th>
+                      <th className="text-right px-4 py-3 font-medium text-gray-600">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {filtered.map((card) => (
+                      <tr key={card.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3">
+                          <p className="font-medium text-gray-900">{card.name}</p>
+                          {card.sku && <p className="text-[10px] text-gray-400 font-mono">{card.sku}</p>}
+                        </td>
+                        <td className="px-4 py-3 text-gray-600 hidden md:table-cell">{card.setName}</td>
+                        <td className="px-4 py-3 text-gray-600 hidden md:table-cell">{card.rarity}</td>
+                        <td className="px-4 py-3 text-right text-gray-900 font-medium">${card.price}</td>
+                        <td className="px-4 py-3 text-center">
+                          {editingStock === card.id ? (
+                            <input
+                              type="number"
+                              value={stockValue}
+                              onChange={(e) => setStockValue(e.target.value)}
+                              onBlur={() => saveStock(card.id)}
+                              onKeyDown={(e) => { if (e.key === 'Enter') saveStock(card.id); }}
+                              autoFocus
+                              min="0"
+                              className="w-16 px-2 py-1 border border-pokemon-red rounded text-center outline-none"
+                            />
+                          ) : (
+                            <button
+                              onClick={() => { setEditingStock(card.id); setStockValue(String(card.stock)); }}
+                              className={`px-2 py-1 rounded text-xs font-medium ${
+                                card.stock === 0 ? 'bg-red-100 text-red-700' :
+                                card.stock <= 3 ? 'bg-orange-100 text-orange-700' :
+                                'bg-gray-100 text-gray-700'
+                              } hover:ring-2 hover:ring-pokemon-red/30`}
+                              title="Click to edit"
+                            >
+                              {card.stock}
+                            </button>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <button onClick={() => deleteCard(card.id)} className="text-red-500 hover:text-red-700 text-xs font-medium">
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
-
-          {/* Product cards */}
-          {filtered.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-gray-200 p-12 text-center text-gray-500">
-              <p className="text-lg">{cards.length === 0 ? 'No products yet.' : 'No matches found.'}</p>
-              <p className="text-sm mt-1">
-                {cards.length === 0 ? 'Add your first product using the Add Product tab.' : 'Try a different search or filter.'}
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {filtered.map((card) => {
-                const stockColor =
-                  card.stock === 0 ? 'text-red-600' :
-                  card.stock <= 3 ? 'text-orange-600' : 'text-green-600';
-                const stockLabel =
-                  card.stock === 0 ? 'Out of stock' :
-                  card.stock <= 3 ? 'Low stock' : 'In stock';
-                return (
-                  <div
-                    key={card.id}
-                    className="bg-white rounded-2xl border border-gray-200 p-4 flex items-center gap-4 hover:shadow-md transition-shadow"
-                  >
-                    {/* Thumbnail */}
-                    <div className="w-14 h-14 shrink-0 rounded-lg bg-gray-50 border border-gray-100 overflow-hidden flex items-center justify-center">
-                      {card.imageUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={card.imageUrl} alt={card.name} className="w-full h-full object-contain"
-                          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                      ) : (
-                        <span className="text-gray-300 text-xl">🎴</span>
-                      )}
-                    </div>
-
-                    {/* Info */}
-                    <div className="min-w-0 flex-1">
-                      <p className="font-semibold text-gray-900 truncate">{card.name}</p>
-                      <p className="text-xs text-gray-500 truncate">
-                        {card.setName} · {card.rarity}
-                        {card.sku && <span className="text-gray-300 font-mono ml-1">· {card.sku}</span>}
-                      </p>
-                      <p className={`text-xs font-medium mt-0.5 ${stockColor}`}>● {stockLabel}</p>
-                    </div>
-
-                    {/* Price (inline editable) */}
-                    <div className="shrink-0 text-right w-20">
-                      {editingPrice === card.id ? (
-                        <input
-                          type="number"
-                          value={priceValue}
-                          onChange={(e) => setPriceValue(e.target.value)}
-                          onBlur={() => savePrice(card.id)}
-                          onKeyDown={(e) => { if (e.key === 'Enter') savePrice(card.id); }}
-                          autoFocus
-                          min="0.01"
-                          step="0.01"
-                          className="w-20 px-2 py-1 border border-pokemon-red rounded-lg text-right outline-none text-sm"
-                        />
-                      ) : (
-                        <button
-                          onClick={() => { setEditingPrice(card.id); setPriceValue(card.price); }}
-                          className="font-bold text-gray-900 hover:text-pokemon-red transition-colors"
-                          title="Click to edit price"
-                        >
-                          ${card.price}
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Stock stepper */}
-                    <div className="shrink-0 flex items-center gap-1.5">
-                      <button
-                        onClick={() => setStock(card.id, Math.max(0, card.stock - 1))}
-                        disabled={card.stock === 0}
-                        className="w-8 h-8 rounded-lg bg-gray-100 text-gray-700 font-bold hover:bg-gray-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center"
-                        title="Decrease stock"
-                      >
-                        −
-                      </button>
-                      <input
-                        type="number"
-                        value={card.stock}
-                        min="0"
-                        onChange={(e) => {
-                          const v = parseInt(e.target.value, 10);
-                          setCards((prev) => prev.map((c) => c.id === card.id ? { ...c, stock: isNaN(v) ? 0 : v } : c));
-                        }}
-                        onBlur={(e) => setStock(card.id, Math.max(0, parseInt(e.target.value, 10) || 0))}
-                        className={`w-14 h-8 border rounded-lg text-center outline-none text-sm font-semibold ${
-                          savingId === card.id ? 'border-pokemon-red' : 'border-gray-200'
-                        } focus:border-pokemon-red`}
-                      />
-                      <button
-                        onClick={() => setStock(card.id, card.stock + 1)}
-                        className="w-8 h-8 rounded-lg bg-gray-100 text-gray-700 font-bold hover:bg-gray-200 transition-colors flex items-center justify-center"
-                        title="Increase stock"
-                      >
-                        +
-                      </button>
-                    </div>
-
-                    {/* Delete */}
-                    <button
-                      onClick={() => deleteCard(card.id)}
-                      className="shrink-0 w-8 h-8 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors flex items-center justify-center"
-                      title="Delete product"
-                    >
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
           {filtered.length > 0 && (
-            <p className="text-xs text-gray-400 mt-4 text-center">
-              Use − / + to adjust stock instantly, or type a number. Click a price to edit it.
+            <p className="text-xs text-gray-400 mt-3 text-center">
+              Tip: click any stock number to edit it inline
             </p>
           )}
         </div>

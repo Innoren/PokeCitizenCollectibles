@@ -2,14 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { cards } from '@/db/schema';
 import { eq } from 'drizzle-orm';
-import { classifyProduct } from '@/lib/classify';
 
 // POST — Add a new card
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
-    const { name, setName, rarity, condition, price, imageUrl, description, stock, sku, productType } = body;
+    const { name, setName, rarity, condition, price, imageUrl, description, stock, sku } = body;
 
     // Basic validation
     if (!name || !setName || !rarity || !condition || !price || !imageUrl) {
@@ -26,16 +25,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Auto-classify: Single Card vs Sealed Product
-    const category = classifyProduct({ name, productType, rarity, condition });
-
     const [newCard] = await db
       .insert(cards)
       .values({
         sku: sku || null,
         name,
         setName,
-        category,
         rarity,
         condition,
         price: String(price),

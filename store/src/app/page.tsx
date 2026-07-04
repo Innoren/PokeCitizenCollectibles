@@ -30,8 +30,8 @@ export default async function HomePage() {
         </h2>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[
-            { name: 'Single Cards', href: '/shop?category=Single+Card', emoji: '🎴', gradient: 'from-red-500 to-orange-400' },
-            { name: 'Sealed Product', href: '/shop?category=Sealed+Product', emoji: '📦', gradient: 'from-blue-500 to-cyan-400' },
+            { name: 'Single Cards', href: '/shop', emoji: '🎴', gradient: 'from-red-500 to-orange-400' },
+            { name: 'Sealed Product', href: '/shop?rarity=Sealed+Product', emoji: '📦', gradient: 'from-blue-500 to-cyan-400' },
             { name: 'Ultra Rare', href: '/shop?rarity=Ultra+Rare', emoji: '✨', gradient: 'from-purple-500 to-pink-400' },
             { name: 'Secret Rare', href: '/shop?rarity=Secret+Rare', emoji: '⭐', gradient: 'from-yellow-400 to-amber-500' },
           ].map((cat) => (
@@ -78,7 +78,7 @@ export default async function HomePage() {
           <div className="relative px-8 py-12 md:px-16 md:py-14 flex flex-col md:flex-row items-center justify-between gap-6">
             <div className="text-center md:text-left">
               <h3 className="text-2xl md:text-3xl font-bold text-white mb-2">
-                Free Shipping on Orders Over $200
+                Free Shipping on Orders Over $50
               </h3>
               <p className="text-gray-300">Every card ships within 24 hours in protective packaging.</p>
             </div>
@@ -98,7 +98,7 @@ export default async function HomePage() {
           {[
             { icon: '🛡️', title: 'Authenticity Guaranteed', desc: 'Every card verified before listing' },
             { icon: '📦', title: 'Secure Packaging', desc: 'Sleeves and top loaders included' },
-            { icon: '⚡', title: 'Fast Shipping', desc: 'Ships within 24 hours, free over $200' },
+            { icon: '⚡', title: 'Fast Shipping', desc: 'Ships within 24 hours, free over $50' },
           ].map((item) => (
             <div key={item.title} className="flex items-center gap-4 p-6 rounded-2xl bg-white border border-gray-200 hover:shadow-md transition-shadow">
               <div className="text-3xl">{item.icon}</div>

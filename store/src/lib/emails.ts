@@ -91,7 +91,7 @@ export function orderConfirmationEmail(data: OrderConfirmationData) {
         <ul style="margin:8px 0 0;padding-left:20px;font-size:13px;color:#666;line-height:1.8">
           <li>Your items will be carefully packaged in sleeves & top loaders</li>
           <li>You'll receive a shipping confirmation with tracking within 24 hours</li>
-          <li>Free shipping on orders over $200</li>
+          <li>Free shipping on orders over $50</li>
         </ul>
       </div>
 

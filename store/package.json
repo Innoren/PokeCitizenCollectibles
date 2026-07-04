@@ -9,15 +9,13 @@
     "lint": "next lint",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:push": "drizzle-kit push:pg",
-    "db:create-admin": "npx tsx --env-file=.env.local src/db/create-admin.ts",
-    "db:backup": "npx tsx --env-file=.env.local src/db/backup.ts",
-    "db:backfill-categories": "npx tsx --env-file=.env.local src/db/backfill-categories.ts"
+    "db:push": "drizzle-kit push",
+    "db:seed": "npx tsx --env-file=.env.local src/db/seed.ts",
+    "db:create-admin": "npx tsx --env-file=.env.local src/db/create-admin.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "0.9.5",
     "@stripe/stripe-js": "^2.4.0",
-    "@vercel/blob": "^0.27.3",
     "dotenv": "^16.4.7",
     "drizzle-orm": "0.29.3",
     "next": "14.1.0",
