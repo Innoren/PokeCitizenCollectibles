@@ -1,0 +1,23 @@
+{
+  "takenAt": "2026-07-03T17:14:00.086Z",
+  "counts": {
+    "cards": 0,
+    "orders": 0,
+    "orderItems": 0,
+    "users": 1
+  },
+  "data": {
+    "cards": [],
+    "orders": [],
+    "orderItems": [],
+    "users": [
+      {
+        "id": 1,
+        "email": "admin@pokecitizencollectibles.com",
+        "name": "Justin",
+        "is_admin": true,
+        "created_at": "2026-07-03T16:21:51.815Z"
+      }
+    ]
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "enabled": true,
+  "name": "Auto Push on Stop",
+  "description": "Commits all changes and pushes to origin/main when the agent stops, keeping both workstations in sync",
+  "version": "1",
+  "when": {
+    "type": "agentStop"
+  },
+  "then": {
+    "type": "runCommand",
+    "command": "cd store && git add -A && git diff --cached --quiet || (git commit -m \"auto-sync: $(date '+%Y-%m-%d %H:%M:%S')\" && git push origin main)",
+    "timeout": 30
+  }
+}

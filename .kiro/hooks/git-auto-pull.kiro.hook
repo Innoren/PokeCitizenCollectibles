@@ -1,0 +1,14 @@
+{
+  "enabled": true,
+  "name": "Auto Pull on Prompt",
+  "description": "Pulls the latest changes from origin/main before each prompt to stay in sync with other workstations",
+  "version": "1",
+  "when": {
+    "type": "promptSubmit"
+  },
+  "then": {
+    "type": "runCommand",
+    "command": "cd store && git pull --rebase origin main",
+    "timeout": 30
+  }
+}

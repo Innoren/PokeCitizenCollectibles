@@ -1,0 +1,17 @@
+{
+  "enabled": true,
+  "name": "Auto-backup before schema changes",
+  "description": "Automatically runs the read-only db:backup whenever the Drizzle schema file changes, so a snapshot always exists before you run a migration.",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "src/db/schema.ts"
+    ]
+  },
+  "then": {
+    "type": "runCommand",
+    "command": "npm run db:backup",
+    "timeout": 120
+  }
+}
