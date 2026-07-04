@@ -37,6 +37,14 @@ export default function Navbar() {
 
   return (
     <header className="sticky top-0 z-50 bg-white shadow-sm">
+      {/* Announcement bar */}
+      <div className="bg-gray-900 text-white text-center text-xs sm:text-sm py-2 px-4">
+        <span className="text-gray-300">New arrivals added weekly — </span>
+        <Link href="/shop" className="font-semibold underline underline-offset-2 hover:text-pokemon-yellow transition-colors">
+          Shop the latest
+        </Link>
+      </div>
+
       {/* Top bar */}
       <div className="border-b border-gray-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

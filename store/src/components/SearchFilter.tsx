@@ -3,15 +3,8 @@
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useState, useTransition } from 'react';
 
-const rarities = ['All', 'Common', 'Uncommon', 'Rare', 'Ultra Rare', 'Secret Rare'];
-const conditions = ['All', 'Mint', 'Near Mint', 'Excellent', 'Good', 'Played'];
-const sortOptions = [
-  { value: 'newest', label: 'Newest' },
-  { value: 'price_asc', label: 'Price: Low to High' },
-  { value: 'price_desc', label: 'Price: High to Low' },
-  { value: 'name_asc', label: 'Name: A-Z' },
-  { value: 'name_desc', label: 'Name: Z-A' },
-];
+const rarities = ['Common', 'Uncommon', 'Rare', 'Ultra Rare', 'Secret Rare', 'Sealed Product'];
+const conditions = ['Mint', 'Near Mint', 'Excellent', 'Good', 'Played', 'Factory Sealed'];
 
 export default function SearchFilter() {
   const router = useRouter();
@@ -19,6 +12,9 @@ export default function SearchFilter() {
   const [isPending, startTransition] = useTransition();
 
   const [search, setSearch] = useState(searchParams.get('search') || '');
+
+  const activeRarity = searchParams.get('rarity') || '';
+  const activeCondition = searchParams.get('condition') || '';
 
   const createQueryString = useCallback(
     (params: Record<string, string>) => {
@@ -42,87 +38,122 @@ export default function SearchFilter() {
     });
   };
 
-  const handleFilterChange = (key: string, value: string) => {
+  // Toggle a single-select filter: clicking the active value clears it.
+  const toggleFilter = (key: string, value: string) => {
+    const current = searchParams.get(key) || '';
+    const next = current === value ? '' : value;
     startTransition(() => {
-      router.push(`/shop?${createQueryString({ [key]: value, page: '1' })}`);
+      router.push(`/shop?${createQueryString({ [key]: next, page: '1' })}`);
     });
   };
 
+  const clearAll = () => {
+    startTransition(() => {
+      setSearch('');
+      router.push('/shop');
+    });
+  };
+
+  const hasActiveFilters = !!(activeRarity || activeCondition || searchParams.get('search'));
+
   return (
-    <div className="space-y-4">
-      {/* Search Bar */}
-      <form onSubmit={handleSearch} className="relative">
+    <aside className="w-full md:w-64 shrink-0">
+      {/* Search */}
+      <form onSubmit={handleSearch} className="relative mb-6">
         <input
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search for Pokemon cards..."
-          className="w-full px-5 py-3 pl-12 bg-gray-800/50 border border-gray-700/50 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-pokemon-yellow/50 focus:ring-1 focus:ring-pokemon-yellow/25 transition-all"
+          placeholder="Search cards..."
+          className="w-full px-4 py-2.5 pl-10 bg-white border border-gray-300 rounded-lg text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:border-pokemon-red focus:ring-1 focus:ring-pokemon-red/20 transition-all"
         />
         <svg
           xmlns="http://www.w3.org/2000/svg"
-          className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-500"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
+          className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400"
+          fill="none" viewBox="0 0 24 24" stroke="currentColor"
         >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-          />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
         </svg>
         {isPending && (
-          <div className="absolute right-4 top-1/2 -translate-y-1/2">
-            <div className="w-5 h-5 border-2 border-pokemon-yellow/30 border-t-pokemon-yellow rounded-full animate-spin" />
+          <div className="absolute right-3 top-1/2 -translate-y-1/2">
+            <div className="w-4 h-4 border-2 border-pokemon-red/30 border-t-pokemon-red rounded-full animate-spin" />
           </div>
         )}
       </form>
 
-      {/* Filters Row */}
-      <div className="flex flex-wrap gap-3">
-        {/* Rarity Filter */}
-        <select
-          value={searchParams.get('rarity') || 'All'}
-          onChange={(e) => handleFilterChange('rarity', e.target.value)}
-          className="px-4 py-2 bg-gray-800/50 border border-gray-700/50 rounded-lg text-gray-300 text-sm focus:outline-none focus:border-pokemon-yellow/50 transition-all cursor-pointer"
-        >
-          <option value="All">All Rarities</option>
-          {rarities.slice(1).map((rarity) => (
-            <option key={rarity} value={rarity}>
-              {rarity}
-            </option>
-          ))}
-        </select>
+      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+          <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Filter By</h3>
+          {hasActiveFilters && (
+            <button onClick={clearAll} className="text-xs text-pokemon-red hover:underline font-medium">
+              Clear all
+            </button>
+          )}
+        </div>
 
-        {/* Condition Filter */}
-        <select
-          value={searchParams.get('condition') || 'All'}
-          onChange={(e) => handleFilterChange('condition', e.target.value)}
-          className="px-4 py-2 bg-gray-800/50 border border-gray-700/50 rounded-lg text-gray-300 text-sm focus:outline-none focus:border-pokemon-yellow/50 transition-all cursor-pointer"
-        >
-          <option value="All">All Conditions</option>
-          {conditions.slice(1).map((condition) => (
-            <option key={condition} value={condition}>
-              {condition}
-            </option>
-          ))}
-        </select>
+        {/* Rarity */}
+        <div className="px-4 py-4 border-b border-gray-100">
+          <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Category</h4>
+          <ul className="space-y-1.5">
+            {rarities.map((rarity) => {
+              const active = activeRarity === rarity;
+              return (
+                <li key={rarity}>
+                  <button
+                    onClick={() => toggleFilter('rarity', rarity)}
+                    className="flex items-center gap-2.5 w-full text-left group"
+                  >
+                    <span className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+                      active ? 'bg-pokemon-red border-pokemon-red' : 'border-gray-300 group-hover:border-pokemon-red'
+                    }`}>
+                      {active && (
+                        <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </span>
+                    <span className={`text-sm transition-colors ${active ? 'text-gray-900 font-medium' : 'text-gray-600 group-hover:text-gray-900'}`}>
+                      {rarity}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
 
-        {/* Sort */}
-        <select
-          value={searchParams.get('sort') || 'newest'}
-          onChange={(e) => handleFilterChange('sort', e.target.value)}
-          className="px-4 py-2 bg-gray-800/50 border border-gray-700/50 rounded-lg text-gray-300 text-sm focus:outline-none focus:border-pokemon-yellow/50 transition-all cursor-pointer"
-        >
-          {sortOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+        {/* Condition */}
+        <div className="px-4 py-4">
+          <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Condition</h4>
+          <ul className="space-y-1.5">
+            {conditions.map((condition) => {
+              const active = activeCondition === condition;
+              return (
+                <li key={condition}>
+                  <button
+                    onClick={() => toggleFilter('condition', condition)}
+                    className="flex items-center gap-2.5 w-full text-left group"
+                  >
+                    <span className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+                      active ? 'bg-pokemon-red border-pokemon-red' : 'border-gray-300 group-hover:border-pokemon-red'
+                    }`}>
+                      {active && (
+                        <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </span>
+                    <span className={`text-sm transition-colors ${active ? 'text-gray-900 font-medium' : 'text-gray-600 group-hover:text-gray-900'}`}>
+                      {condition}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       </div>
-    </div>
+    </aside>
   );
 }
