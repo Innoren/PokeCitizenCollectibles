@@ -35,6 +35,8 @@ export async function GET(request: NextRequest) {
   }
 
   const onlyAuto = request.nextUrl.searchParams.get('onlyAuto') === '1';
+  const batchSize = parseInt(request.nextUrl.searchParams.get('batch') || '10', 10);
+  const offset = parseInt(request.nextUrl.searchParams.get('offset') || '0', 10);
 
   try {
     // Fetch cards to sync
@@ -42,21 +44,24 @@ export async function GET(request: NextRequest) {
     if (onlyAuto) {
       cardsToSync = await db.select().from(cards).where(eq(cards.autoPrice, true));
     } else {
-      // Sync ALL cards — used by the admin "Update All Prices" button
       cardsToSync = await db.select().from(cards);
     }
+
+    const total = cardsToSync.length;
+    // Process only the batch slice
+    const batch = cardsToSync.slice(offset, offset + batchSize);
 
     let updated = 0;
     let failed = 0;
     let skipped = 0;
     const now = new Date();
 
-    for (let i = 0; i < cardsToSync.length; i++) {
-      const card = cardsToSync[i];
+    for (let i = 0; i < batch.length; i++) {
+      const card = batch[i];
 
-      // Add delay every 5 requests to avoid rate-limiting (free tier: 100/day without key, 20k with key)
-      if (i > 0 && i % 5 === 0) {
-        await delay(500);
+      // Add delay every 3 requests to avoid rate-limiting
+      if (i > 0 && i % 3 === 0) {
+        await delay(300);
       }
 
       const market = await resolveMarketPrice(card);
@@ -84,12 +89,19 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    const nextOffset = offset + batchSize;
+    const hasMore = nextOffset < total;
+
     return NextResponse.json({
       ok: true,
       updated,
       failed,
       skipped,
-      total: cardsToSync.length,
+      batchProcessed: batch.length,
+      total,
+      offset,
+      nextOffset: hasMore ? nextOffset : null,
+      hasMore,
       syncedAt: now.toISOString(),
     });
   } catch (error: any) {

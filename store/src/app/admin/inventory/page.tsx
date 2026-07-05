@@ -187,15 +187,28 @@ export default function InventoryPage() {
   const syncAllPrices = async () => {
     setSyncing(true);
     setSyncResult(null);
+    let totalUpdated = 0;
+    let totalFailed = 0;
+    let totalSkipped = 0;
+    let offset = 0;
+    let hasMore = true;
+
     try {
-      const res = await fetch('/api/admin/auto-price');
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Sync failed');
-      setSyncResult(`✓ Updated ${data.updated} of ${data.total} products. ${data.failed > 0 ? `${data.failed} failed.` : ''}`);
-      // Reload inventory to reflect new prices
+      while (hasMore) {
+        const res = await fetch(`/api/admin/auto-price?batch=10&offset=${offset}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Sync failed');
+        totalUpdated += data.updated || 0;
+        totalFailed += data.failed || 0;
+        totalSkipped += data.skipped || 0;
+        hasMore = data.hasMore;
+        offset = data.nextOffset || offset + 10;
+        setSyncResult(`⏳ Processing... ${offset} of ${data.total} cards (${totalUpdated} updated so far)`);
+      }
+      setSyncResult(`✓ Done! Updated ${totalUpdated} products. ${totalSkipped > 0 ? `${totalSkipped} skipped (no market data).` : ''} ${totalFailed > 0 ? `${totalFailed} failed.` : ''}`);
       loadInventory();
     } catch (err: any) {
-      setSyncResult(`✗ ${err.message || 'Sync failed'}`);
+      setSyncResult(`✗ ${err.message || 'Sync failed'} (${totalUpdated} updated before error)`);
     }
     setSyncing(false);
   };
