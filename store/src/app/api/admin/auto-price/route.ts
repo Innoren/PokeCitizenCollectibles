@@ -10,40 +10,58 @@ export const maxDuration = 60;
 /**
  * Automatic market-based pricing.
  *
- * GET  — Sync every card with auto_price = true:
+ * GET  — Sync all cards (or those with auto_price = true when ?onlyAuto=1):
  *        newPrice = marketPrice * (1 + markup/100), rounded to 2 dp.
- *        Also records last_market_price and last_price_sync.
- *        Cron-safe: if CRON_SECRET is set, a matching Bearer token is accepted.
+ *        Processes in batches with a small delay to avoid rate-limiting.
+ *        Cron-safe: accepts Bearer CRON_SECRET.
  *
- * POST — Toggle auto-pricing / markup for a single card.
- *        Body: { id, autoPrice?, priceMarkup? }
+ * POST — Toggle auto-pricing / markup for a single card, or enable all.
+ *        Body: { id, autoPrice?, priceMarkup? } or { enableAll: true }
  */
 
 function roundPrice(n: number): string {
   return (Math.round(n * 100) / 100).toFixed(2);
 }
 
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export async function GET(request: NextRequest) {
-  // Optional cron authorization: when a CRON_SECRET is configured and an
-  // Authorization header is present, it must match. The admin UI (no header)
-  // is allowed through to preserve existing behaviour.
   const secret = process.env.CRON_SECRET;
   const auth = request.headers.get('authorization');
   if (secret && auth && auth !== `Bearer ${secret}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  const onlyAuto = request.nextUrl.searchParams.get('onlyAuto') === '1';
+
   try {
-    const autoCards = await db.select().from(cards).where(eq(cards.autoPrice, true));
+    // Fetch cards to sync
+    let cardsToSync;
+    if (onlyAuto) {
+      cardsToSync = await db.select().from(cards).where(eq(cards.autoPrice, true));
+    } else {
+      // Sync ALL cards — used by the admin "Update All Prices" button
+      cardsToSync = await db.select().from(cards);
+    }
 
     let updated = 0;
     let failed = 0;
+    let skipped = 0;
     const now = new Date();
 
-    for (const card of autoCards) {
+    for (let i = 0; i < cardsToSync.length; i++) {
+      const card = cardsToSync[i];
+
+      // Add delay every 5 requests to avoid rate-limiting (free tier: 100/day without key, 20k with key)
+      if (i > 0 && i % 5 === 0) {
+        await delay(500);
+      }
+
       const market = await resolveMarketPrice(card);
       if (market === null) {
-        failed++;
+        skipped++;
         continue;
       }
 
@@ -57,6 +75,7 @@ export async function GET(request: NextRequest) {
             price: newPrice,
             lastMarketPrice: roundPrice(market),
             lastPriceSync: now,
+            autoPrice: true,
           })
           .where(eq(cards.id, card.id));
         updated++;
@@ -69,7 +88,8 @@ export async function GET(request: NextRequest) {
       ok: true,
       updated,
       failed,
-      total: autoCards.length,
+      skipped,
+      total: cardsToSync.length,
       syncedAt: now.toISOString(),
     });
   } catch (error: any) {
@@ -81,6 +101,13 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+
+    // Enable auto-pricing for ALL cards
+    if (body.enableAll) {
+      await db.update(cards).set({ autoPrice: true });
+      return NextResponse.json({ ok: true, message: 'Auto-pricing enabled for all cards' });
+    }
+
     const { id, autoPrice, priceMarkup } = body;
 
     if (!id) {
