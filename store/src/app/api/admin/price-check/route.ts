@@ -2,10 +2,10 @@ import { NextResponse } from 'next/server';
 import { db } from '@/db';
 import { cards } from '@/db/schema';
 import { isNotNull } from 'drizzle-orm';
+import { resolveMarketPrice } from '@/lib/marketPrice';
 
 export const dynamic = 'force-dynamic';
-
-const POKEMON_TCG_API = 'https://api.pokemontcg.io/v2';
+export const maxDuration = 60;
 
 interface PriceAlert {
   id: number;
@@ -22,62 +22,37 @@ interface PriceAlert {
 
 export async function GET() {
   try {
-    // Get all cards that have a SKU (so we can look them up)
-    const allCards = await db
-      .select()
-      .from(cards)
-      .where(isNotNull(cards.sku));
+    // Only cards with a SKU can be matched to a market price.
+    const allCards = await db.select().from(cards).where(isNotNull(cards.sku));
 
     const alerts: PriceAlert[] = [];
 
     for (const card of allCards) {
-      if (!card.sku) continue;
+      const marketPrice = await resolveMarketPrice(card);
+      if (marketPrice === null) continue;
 
-      try {
-        const res = await fetch(`${POKEMON_TCG_API}/cards/${card.sku}`, {
-          headers: { 'X-Api-Key': process.env.POKEMON_TCG_API_KEY || '' },
-        });
+      const yourPrice = parseFloat(card.price);
+      const diff = ((yourPrice - marketPrice) / marketPrice) * 100;
 
-        if (!res.ok) continue;
+      let status: 'above' | 'below' | 'fair' = 'fair';
+      if (diff > 15) status = 'above';
+      else if (diff < -15) status = 'below';
 
-        const data = await res.json();
-        const tcgCard = data.data;
-
-        // Get market price from TCGPlayer data
-        const marketPrice =
-          tcgCard?.tcgplayer?.prices?.holofoil?.market ||
-          tcgCard?.tcgplayer?.prices?.normal?.market ||
-          tcgCard?.tcgplayer?.prices?.reverseHolofoil?.market ||
-          tcgCard?.cardmarket?.prices?.averageSellPrice ||
-          null;
-
-        if (marketPrice === null) continue;
-
-        const yourPrice = parseFloat(card.price);
-        const diff = ((yourPrice - marketPrice) / marketPrice) * 100;
-
-        let status: 'above' | 'below' | 'fair' = 'fair';
-        if (diff > 15) status = 'above';
-        else if (diff < -15) status = 'below';
-
-        alerts.push({
-          id: card.id,
-          name: card.name,
-          sku: card.sku,
-          yourPrice: card.price,
-          marketPrice,
-          difference: `${diff > 0 ? '+' : ''}${diff.toFixed(1)}%`,
-          status,
-          autoPrice: card.autoPrice,
-          priceMarkup: card.priceMarkup || '10.00',
-          lastPriceSync: card.lastPriceSync ? card.lastPriceSync.toISOString() : null,
-        });
-      } catch {
-        continue;
-      }
+      alerts.push({
+        id: card.id,
+        name: card.name,
+        sku: card.sku,
+        yourPrice: card.price,
+        marketPrice,
+        difference: `${diff > 0 ? '+' : ''}${diff.toFixed(1)}%`,
+        status,
+        autoPrice: card.autoPrice,
+        priceMarkup: card.priceMarkup || '10.00',
+        lastPriceSync: card.lastPriceSync ? card.lastPriceSync.toISOString() : null,
+      });
     }
 
-    // Sort: items priced below market first (you're leaving money on the table)
+    // Sort: items priced below market first (money left on the table).
     alerts.sort((a, b) => {
       const order = { below: 0, above: 1, fair: 2 };
       return order[a.status] - order[b.status];

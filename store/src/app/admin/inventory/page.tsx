@@ -46,6 +46,8 @@ export default function InventoryPage() {
   const [stockValue, setStockValue] = useState('');
   const [editingPrice, setEditingPrice] = useState<number | null>(null);
   const [priceValue, setPriceValue] = useState('');
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<string | null>(null);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -180,6 +182,22 @@ export default function InventoryPage() {
       alert('Failed to update price');
     }
     setEditingPrice(null);
+  };
+
+  const syncAllPrices = async () => {
+    setSyncing(true);
+    setSyncResult(null);
+    try {
+      const res = await fetch('/api/admin/auto-price');
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Sync failed');
+      setSyncResult(`✓ Updated ${data.updated} of ${data.total} products. ${data.failed > 0 ? `${data.failed} failed.` : ''}`);
+      // Reload inventory to reflect new prices
+      loadInventory();
+    } catch (err: any) {
+      setSyncResult(`✗ ${err.message || 'Sync failed'}`);
+    }
+    setSyncing(false);
   };
 
   const filtered = cards.filter((c) =>
@@ -372,15 +390,32 @@ export default function InventoryPage() {
       {/* MANAGE TAB */}
       {tab === 'manage' && (
         <div>
-          <div className="mb-4">
+          <div className="flex flex-col sm:flex-row gap-3 mb-4">
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search by name, set, or SKU..."
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pokemon-red/20 focus:border-pokemon-red outline-none"
+              className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pokemon-red/20 focus:border-pokemon-red outline-none"
             />
+            <button
+              onClick={syncAllPrices}
+              disabled={syncing}
+              className="shrink-0 px-5 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-semibold rounded-lg hover:from-green-600 hover:to-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
+            >
+              {syncing ? '⏳ Syncing...' : '💰 Update All Prices'}
+            </button>
           </div>
+
+          {syncResult && (
+            <div className={`mb-4 p-3 rounded-lg text-sm font-medium ${
+              syncResult.startsWith('✓')
+                ? 'bg-green-50 text-green-700 border border-green-200'
+                : 'bg-red-50 text-red-700 border border-red-200'
+            }`}>
+              {syncResult}
+            </div>
+          )}
 
           <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
             {filtered.length === 0 ? (
