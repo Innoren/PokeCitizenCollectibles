@@ -199,15 +199,20 @@ export default function InventoryPage() {
 
     try {
       while (hasMore) {
-        const res = await fetch(`/api/admin/auto-price?batch=10&offset=${offset}${markupParam}`);
+        const res = await fetch(`/api/admin/auto-price?batch=5&offset=${offset}${markupParam}`);
+        if (!res.ok) {
+          const text = await res.text();
+          let errMsg = 'Sync failed';
+          try { errMsg = JSON.parse(text).error || errMsg; } catch { errMsg = `Server error (${res.status})`; }
+          throw new Error(errMsg);
+        }
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Sync failed');
         totalUpdated += data.updated || 0;
         totalFailed += data.failed || 0;
         totalSkipped += data.skipped || 0;
         hasMore = data.hasMore;
-        offset = data.nextOffset || offset + 10;
-        setSyncResult(`⏳ Processing... ${offset} of ${data.total} cards (${totalUpdated} updated so far)`);
+        offset = data.nextOffset || offset + 5;
+        setSyncResult(`⏳ Processing... ${Math.min(offset, data.total)} of ${data.total} cards (${totalUpdated} updated so far)`);
       }
       setSyncResult(`✓ Done! Updated ${totalUpdated} products at ${!isNaN(markupVal) ? markupVal : 10}% markup. ${totalSkipped > 0 ? `${totalSkipped} skipped (no market data).` : ''} ${totalFailed > 0 ? `${totalFailed} failed.` : ''}`);
       loadInventory();

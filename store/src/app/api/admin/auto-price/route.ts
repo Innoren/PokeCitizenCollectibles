@@ -1,23 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { cards } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { resolveMarketPrice } from '@/lib/marketPrice';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
-
-/**
- * Automatic market-based pricing.
- *
- * GET  — Sync all cards (or those with auto_price = true when ?onlyAuto=1):
- *        newPrice = marketPrice * (1 + markup/100), rounded to 2 dp.
- *        Processes in batches with a small delay to avoid rate-limiting.
- *        Cron-safe: accepts Bearer CRON_SECRET.
- *
- * POST — Toggle auto-pricing / markup for a single card, or enable all.
- *        Body: { id, autoPrice?, priceMarkup? } or { enableAll: true }
- */
 
 function roundPrice(n: number): string {
   return (Math.round(n * 100) / 100).toFixed(2);
@@ -34,24 +22,23 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const onlyAuto = request.nextUrl.searchParams.get('onlyAuto') === '1';
-  const batchSize = parseInt(request.nextUrl.searchParams.get('batch') || '10', 10);
+  const batchSize = Math.min(parseInt(request.nextUrl.searchParams.get('batch') || '5', 10), 10);
   const offset = parseInt(request.nextUrl.searchParams.get('offset') || '0', 10);
   const markupOverride = request.nextUrl.searchParams.get('markup');
   const globalMarkup = markupOverride !== null ? parseFloat(markupOverride) : null;
 
   try {
-    // Fetch cards to sync
-    let cardsToSync;
-    if (onlyAuto) {
-      cardsToSync = await db.select().from(cards).where(eq(cards.autoPrice, true));
-    } else {
-      cardsToSync = await db.select().from(cards);
-    }
+    // Get total count first (fast query)
+    const countResult = await db.select({ count: sql<number>`count(*)` }).from(cards);
+    const total = Number(countResult[0].count);
 
-    const total = cardsToSync.length;
-    // Process only the batch slice
-    const batch = cardsToSync.slice(offset, offset + batchSize);
+    // Only fetch the batch we need (not all 442 cards)
+    const batch = await db
+      .select()
+      .from(cards)
+      .orderBy(cards.id)
+      .limit(batchSize)
+      .offset(offset);
 
     let updated = 0;
     let failed = 0;
@@ -61,35 +48,33 @@ export async function GET(request: NextRequest) {
     for (let i = 0; i < batch.length; i++) {
       const card = batch[i];
 
-      // Add delay every 3 requests to avoid rate-limiting
-      if (i > 0 && i % 3 === 0) {
-        await delay(300);
+      // Delay between requests to avoid rate-limiting
+      if (i > 0) {
+        await delay(200);
       }
-
-      const market = await resolveMarketPrice(card);
-      if (market === null) {
-        skipped++;
-        continue;
-      }
-
-      const markup = (globalMarkup !== null && !isNaN(globalMarkup)) ? globalMarkup : (parseFloat(card.priceMarkup ?? '10') || 0);
-      const newPrice = roundPrice(market * (1 + markup / 100));
 
       try {
+        const market = await resolveMarketPrice(card);
+        if (market === null) {
+          skipped++;
+          continue;
+        }
+
+        const markup = (globalMarkup !== null && !isNaN(globalMarkup))
+          ? globalMarkup
+          : (parseFloat(card.priceMarkup ?? '10') || 0);
+        const newPrice = roundPrice(market * (1 + markup / 100));
+
         const updateData: Record<string, any> = {
           price: newPrice,
           lastMarketPrice: roundPrice(market),
           lastPriceSync: now,
           autoPrice: true,
         };
-        // Persist the markup if it was overridden globally
         if (globalMarkup !== null && !isNaN(globalMarkup)) {
           updateData.priceMarkup = globalMarkup.toFixed(2);
         }
-        await db
-          .update(cards)
-          .set(updateData)
-          .where(eq(cards.id, card.id));
+        await db.update(cards).set(updateData).where(eq(cards.id, card.id));
         updated++;
       } catch {
         failed++;
@@ -113,7 +98,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (error: any) {
     console.error('Auto-price sync error:', error);
-    return NextResponse.json({ error: 'Auto-price sync failed' }, { status: 500 });
+    return NextResponse.json({ error: error.message || 'Auto-price sync failed' }, { status: 500 });
   }
 }
 
@@ -121,10 +106,17 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
-    // Enable auto-pricing for ALL cards
     if (body.enableAll) {
       await db.update(cards).set({ autoPrice: true });
       return NextResponse.json({ ok: true, message: 'Auto-pricing enabled for all cards' });
+    }
+
+    if (body.setGlobalMarkup !== undefined) {
+      const m = parseFloat(body.setGlobalMarkup);
+      if (!isNaN(m)) {
+        await db.update(cards).set({ priceMarkup: m.toFixed(2) });
+        return NextResponse.json({ ok: true, message: `Markup set to ${m}% for all cards` });
+      }
     }
 
     const { id, autoPrice, priceMarkup } = body;
