@@ -66,14 +66,29 @@ export default function PricingPage() {
   const syncAutoPrices = async () => {
     setSyncing(true);
     setSyncResult(null);
+    let totalUpdated = 0;
+    let totalFailed = 0;
+    let offset = 0;
+    let hasMore = true;
+
     try {
-      const res = await fetch('/api/admin/auto-price');
-      const data = await res.json();
-      setSyncResult({ updated: data.updated, failed: data.failed });
-      // Refresh the price list
+      while (hasMore) {
+        const res = await fetch(`/api/admin/auto-price?batch=5&offset=${offset}&onlyAuto=1`);
+        if (!res.ok) {
+          let errMsg = `Server error (${res.status})`;
+          try { const t = await res.text(); const j = JSON.parse(t); errMsg = j.error || errMsg; } catch {}
+          throw new Error(errMsg);
+        }
+        const data = await res.json();
+        totalUpdated += data.updated || 0;
+        totalFailed += data.failed || 0;
+        hasMore = data.hasMore;
+        offset = data.nextOffset || offset + 5;
+      }
+      setSyncResult({ updated: totalUpdated, failed: totalFailed });
       await fetchPrices();
     } catch {
-      setSyncResult({ updated: 0, failed: -1 });
+      setSyncResult({ updated: totalUpdated, failed: -1 });
     }
     setSyncing(false);
   };

@@ -26,19 +26,20 @@ export async function GET(request: NextRequest) {
   const offset = parseInt(request.nextUrl.searchParams.get('offset') || '0', 10);
   const markupOverride = request.nextUrl.searchParams.get('markup');
   const globalMarkup = markupOverride !== null ? parseFloat(markupOverride) : null;
+  const onlyAuto = request.nextUrl.searchParams.get('onlyAuto') === '1';
 
   try {
-    // Get total count first (fast query)
-    const countResult = await db.select({ count: sql<number>`count(*)` }).from(cards);
+    // Get total count (filtered if onlyAuto)
+    const countResult = onlyAuto
+      ? await db.select({ count: sql<number>`count(*)` }).from(cards).where(eq(cards.autoPrice, true))
+      : await db.select({ count: sql<number>`count(*)` }).from(cards);
     const total = Number(countResult[0].count);
 
-    // Only fetch the batch we need (not all 442 cards)
-    const batch = await db
-      .select()
-      .from(cards)
-      .orderBy(cards.id)
-      .limit(batchSize)
-      .offset(offset);
+    // Only fetch the batch we need
+    const baseQuery = db.select().from(cards);
+    const batch = onlyAuto
+      ? await baseQuery.where(eq(cards.autoPrice, true)).orderBy(cards.id).limit(batchSize).offset(offset)
+      : await baseQuery.orderBy(cards.id).limit(batchSize).offset(offset);
 
     let updated = 0;
     let failed = 0;
