@@ -48,6 +48,7 @@ export default function InventoryPage() {
   const [priceValue, setPriceValue] = useState('');
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<string | null>(null);
+  const [globalMarkup, setGlobalMarkup] = useState('10');
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -193,9 +194,12 @@ export default function InventoryPage() {
     let offset = 0;
     let hasMore = true;
 
+    const markupVal = parseFloat(globalMarkup);
+    const markupParam = !isNaN(markupVal) ? `&markup=${markupVal}` : '';
+
     try {
       while (hasMore) {
-        const res = await fetch(`/api/admin/auto-price?batch=10&offset=${offset}`);
+        const res = await fetch(`/api/admin/auto-price?batch=10&offset=${offset}${markupParam}`);
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Sync failed');
         totalUpdated += data.updated || 0;
@@ -205,7 +209,7 @@ export default function InventoryPage() {
         offset = data.nextOffset || offset + 10;
         setSyncResult(`⏳ Processing... ${offset} of ${data.total} cards (${totalUpdated} updated so far)`);
       }
-      setSyncResult(`✓ Done! Updated ${totalUpdated} products. ${totalSkipped > 0 ? `${totalSkipped} skipped (no market data).` : ''} ${totalFailed > 0 ? `${totalFailed} failed.` : ''}`);
+      setSyncResult(`✓ Done! Updated ${totalUpdated} products at ${!isNaN(markupVal) ? markupVal : 10}% markup. ${totalSkipped > 0 ? `${totalSkipped} skipped (no market data).` : ''} ${totalFailed > 0 ? `${totalFailed} failed.` : ''}`);
       loadInventory();
     } catch (err: any) {
       setSyncResult(`✗ ${err.message || 'Sync failed'} (${totalUpdated} updated before error)`);
@@ -411,13 +415,28 @@ export default function InventoryPage() {
               placeholder="Search by name, set, or SKU..."
               className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-pokemon-red/20 focus:border-pokemon-red outline-none"
             />
-            <button
-              onClick={syncAllPrices}
-              disabled={syncing}
-              className="shrink-0 px-5 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-semibold rounded-lg hover:from-green-600 hover:to-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
-            >
-              {syncing ? '⏳ Syncing...' : '💰 Update All Prices'}
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-1 bg-white border border-gray-300 rounded-lg px-3 py-2">
+                <span className="text-sm text-gray-500">Markup</span>
+                <input
+                  type="number"
+                  value={globalMarkup}
+                  onChange={(e) => setGlobalMarkup(e.target.value)}
+                  min="0"
+                  max="500"
+                  step="1"
+                  className="w-14 text-center text-sm font-semibold text-gray-900 outline-none"
+                />
+                <span className="text-sm text-gray-500">%</span>
+              </div>
+              <button
+                onClick={syncAllPrices}
+                disabled={syncing}
+                className="px-5 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-semibold rounded-lg hover:from-green-600 hover:to-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
+              >
+                {syncing ? '⏳ Syncing...' : '💰 Update All Prices'}
+              </button>
+            </div>
           </div>
 
           {syncResult && (

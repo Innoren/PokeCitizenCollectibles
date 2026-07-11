@@ -37,6 +37,8 @@ export async function GET(request: NextRequest) {
   const onlyAuto = request.nextUrl.searchParams.get('onlyAuto') === '1';
   const batchSize = parseInt(request.nextUrl.searchParams.get('batch') || '10', 10);
   const offset = parseInt(request.nextUrl.searchParams.get('offset') || '0', 10);
+  const markupOverride = request.nextUrl.searchParams.get('markup');
+  const globalMarkup = markupOverride !== null ? parseFloat(markupOverride) : null;
 
   try {
     // Fetch cards to sync
@@ -70,18 +72,23 @@ export async function GET(request: NextRequest) {
         continue;
       }
 
-      const markup = parseFloat(card.priceMarkup ?? '10') || 0;
+      const markup = (globalMarkup !== null && !isNaN(globalMarkup)) ? globalMarkup : (parseFloat(card.priceMarkup ?? '10') || 0);
       const newPrice = roundPrice(market * (1 + markup / 100));
 
       try {
+        const updateData: Record<string, any> = {
+          price: newPrice,
+          lastMarketPrice: roundPrice(market),
+          lastPriceSync: now,
+          autoPrice: true,
+        };
+        // Persist the markup if it was overridden globally
+        if (globalMarkup !== null && !isNaN(globalMarkup)) {
+          updateData.priceMarkup = globalMarkup.toFixed(2);
+        }
         await db
           .update(cards)
-          .set({
-            price: newPrice,
-            lastMarketPrice: roundPrice(market),
-            lastPriceSync: now,
-            autoPrice: true,
-          })
+          .set(updateData)
           .where(eq(cards.id, card.id));
         updated++;
       } catch {
