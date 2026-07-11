@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const batchSize = Math.min(parseInt(request.nextUrl.searchParams.get('batch') || '3', 10), 5);
+  const batchSize = Math.min(parseInt(request.nextUrl.searchParams.get('batch') || '2', 10), 5);
   const offset = parseInt(request.nextUrl.searchParams.get('offset') || '0', 10);
   const markupOverride = request.nextUrl.searchParams.get('markup');
   const globalMarkup = markupOverride !== null ? parseFloat(markupOverride) : null;

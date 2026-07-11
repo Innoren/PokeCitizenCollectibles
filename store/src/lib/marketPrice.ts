@@ -17,7 +17,7 @@ function apiHeaders(): HeadersInit {
 }
 
 /** Fetch with a hard timeout so a single slow request can't hang the batch. */
-async function fetchWithTimeout(url: string, ms = 3000): Promise<Response | null> {
+async function fetchWithTimeout(url: string, ms = 4000): Promise<Response | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), ms);
   try {
@@ -74,32 +74,28 @@ export async function resolveMarketPrice(card: CardLike): Promise<number | null>
     }
   }
 
-  // 2) Search by name (and set, when available) — handles collector-number SKUs.
+  // 2) Single name search (prefer set+name when available) — one request only,
+  //    to keep each card's lookup fast and predictable.
   const cleanName = card.name.replace(/["\\]/g, '').trim();
   if (!cleanName) return null;
 
-  const queries: string[] = [];
-  if (card.setName) {
-    queries.push(`name:"${cleanName}" set.name:"${card.setName.replace(/["\\]/g, '')}"`);
-  }
-  queries.push(`name:"${cleanName}"`);
+  const q = card.setName
+    ? `name:"${cleanName}" set.name:"${card.setName.replace(/["\\]/g, '')}"`
+    : `name:"${cleanName}"`;
 
-  for (const q of queries) {
-    const res = await fetchWithTimeout(
-      `${POKEMON_TCG_API}/cards?q=${encodeURIComponent(q)}&pageSize=5&orderBy=-set.releaseDate`
-    );
-    if (!res || !res.ok) continue;
-    try {
-      const data = await res.json();
-      const results: any[] = data.data || [];
-      // Pick the first result that actually has a usable market price.
-      for (const r of results) {
-        const price = extractMarketPrice(r);
-        if (price !== null) return price;
-      }
-    } catch {
-      continue;
+  const res = await fetchWithTimeout(
+    `${POKEMON_TCG_API}/cards?q=${encodeURIComponent(q)}&pageSize=5&orderBy=-set.releaseDate`
+  );
+  if (!res || !res.ok) return null;
+  try {
+    const data = await res.json();
+    const results: any[] = data.data || [];
+    for (const r of results) {
+      const price = extractMarketPrice(r);
+      if (price !== null) return price;
     }
+  } catch {
+    return null;
   }
 
   return null;
