@@ -50,6 +50,8 @@ export default function InventoryPage() {
   const [syncResult, setSyncResult] = useState<string | null>(null);
   const [globalMarkup, setGlobalMarkup] = useState('10');
   const [progress, setProgress] = useState<{ processed: number; total: number; updated: number; skipped: number; eta: string } | null>(null);
+  const [syncDetails, setSyncDetails] = useState<Array<{ id: number; name: string; status: string; reason?: string; oldPrice?: string; newPrice?: string; marketPrice?: number }>>([]);
+  const [showReport, setShowReport] = useState(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -197,6 +199,8 @@ export default function InventoryPage() {
   const syncAllPrices = async () => {
     setSyncing(true);
     setSyncResult(null);
+    setSyncDetails([]);
+    setShowReport(false);
     setProgress({ processed: 0, total: cards.length || 0, updated: 0, skipped: 0, eta: 'calculating...' });
     let totalUpdated = 0;
     let totalFailed = 0;
@@ -204,6 +208,7 @@ export default function InventoryPage() {
     let offset = 0;
     let hasMore = true;
     const startTime = Date.now();
+    const allDetails: Array<{ id: number; name: string; status: string; reason?: string; oldPrice?: string; newPrice?: string; marketPrice?: number }> = [];
 
     const markupVal = parseFloat(globalMarkup);
     const markupParam = !isNaN(markupVal) ? `&markup=${markupVal}` : '';
@@ -221,6 +226,7 @@ export default function InventoryPage() {
         totalUpdated += data.updated || 0;
         totalFailed += data.failed || 0;
         totalSkipped += data.skipped || 0;
+        if (Array.isArray(data.details)) allDetails.push(...data.details);
         hasMore = data.hasMore;
         const processed = Math.min(data.nextOffset || offset + 3, data.total);
         offset = data.nextOffset || offset + 3;
@@ -234,10 +240,14 @@ export default function InventoryPage() {
         setProgress({ processed, total: data.total, updated: totalUpdated, skipped: totalSkipped, eta });
       }
       setProgress(null);
-      setSyncResult(`✓ Done! Updated ${totalUpdated} products at ${!isNaN(markupVal) ? markupVal : 10}% markup. ${totalSkipped > 0 ? `${totalSkipped} skipped (no market data).` : ''} ${totalFailed > 0 ? `${totalFailed} failed.` : ''}`);
+      setSyncDetails(allDetails);
+      setShowReport(true);
+      setSyncResult(`✓ Done! Updated ${totalUpdated} products at ${!isNaN(markupVal) ? markupVal : 10}% markup. ${totalSkipped > 0 ? `${totalSkipped} skipped.` : ''} ${totalFailed > 0 ? `${totalFailed} failed.` : ''}`);
       loadInventory();
     } catch (err: any) {
       setProgress(null);
+      setSyncDetails(allDetails);
+      if (allDetails.length > 0) setShowReport(true);
       setSyncResult(`✗ ${err.message || 'Sync failed'} (${totalUpdated} updated before error)`);
     }
     setSyncing(false);
@@ -493,12 +503,76 @@ export default function InventoryPage() {
           )}
 
           {syncResult && (
-            <div className={`mb-4 p-3 rounded-lg text-sm font-medium ${
+            <div className={`mb-2 p-3 rounded-lg text-sm font-medium ${
               syncResult.startsWith('✓')
                 ? 'bg-green-50 text-green-700 border border-green-200'
                 : 'bg-red-50 text-red-700 border border-red-200'
             }`}>
               {syncResult}
+              {syncDetails.length > 0 && (
+                <button
+                  onClick={() => setShowReport((s) => !s)}
+                  className="ml-2 underline font-normal hover:no-underline"
+                >
+                  {showReport ? 'Hide report' : 'View report'}
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Detailed sync report */}
+          {showReport && syncDetails.length > 0 && (
+            <div className="mb-4 bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+              <div className="max-h-96 overflow-y-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 border-b border-gray-200 sticky top-0">
+                    <tr>
+                      <th className="text-left px-4 py-2.5 font-medium text-gray-600">Product</th>
+                      <th className="text-center px-4 py-2.5 font-medium text-gray-600">Status</th>
+                      <th className="text-right px-4 py-2.5 font-medium text-gray-600">Price change</th>
+                      <th className="text-left px-4 py-2.5 font-medium text-gray-600">Details</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {/* Updated first, then skipped, then failed */}
+                    {[...syncDetails]
+                      .sort((a, b) => {
+                        const order: Record<string, number> = { updated: 0, skipped: 1, failed: 2 };
+                        return (order[a.status] ?? 3) - (order[b.status] ?? 3);
+                      })
+                      .map((d) => (
+                        <tr key={d.id} className="hover:bg-gray-50">
+                          <td className="px-4 py-2.5 text-gray-900">{d.name}</td>
+                          <td className="px-4 py-2.5 text-center">
+                            <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
+                              d.status === 'updated' ? 'bg-green-100 text-green-700' :
+                              d.status === 'skipped' ? 'bg-gray-100 text-gray-600' :
+                              'bg-red-100 text-red-700'
+                            }`}>
+                              {d.status === 'updated' ? '✓ Updated' : d.status === 'skipped' ? '⊘ Skipped' : '✗ Failed'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2.5 text-right text-gray-700 whitespace-nowrap">
+                            {d.status === 'updated' && d.oldPrice && d.newPrice ? (
+                              <span>
+                                <span className="text-gray-400 line-through">${d.oldPrice}</span>
+                                {' → '}
+                                <span className="font-semibold text-gray-900">${d.newPrice}</span>
+                              </span>
+                            ) : (
+                              <span className="text-gray-300">—</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-2.5 text-gray-500 text-xs">
+                            {d.status === 'updated'
+                              ? `Market: $${d.marketPrice?.toFixed(2)}`
+                              : d.reason || ''}
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
 

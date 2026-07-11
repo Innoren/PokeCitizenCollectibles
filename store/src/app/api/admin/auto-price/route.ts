@@ -45,6 +45,15 @@ export async function GET(request: NextRequest) {
     let failed = 0;
     let skipped = 0;
     const now = new Date();
+    const details: Array<{
+      id: number;
+      name: string;
+      status: 'updated' | 'skipped' | 'failed';
+      reason?: string;
+      oldPrice?: string;
+      newPrice?: string;
+      marketPrice?: number;
+    }> = [];
 
     for (let i = 0; i < batch.length; i++) {
       const card = batch[i];
@@ -61,6 +70,7 @@ export async function GET(request: NextRequest) {
         card.condition === 'Factory Sealed';
       if (isSealed) {
         skipped++;
+        details.push({ id: card.id, name: card.name, status: 'skipped', reason: 'Sealed product — no market data in TCG API (price manually)' });
         continue;
       }
 
@@ -74,6 +84,10 @@ export async function GET(request: NextRequest) {
         ]);
         if (market === null) {
           skipped++;
+          const reason = !card.sku
+            ? 'No SKU and no market match found by name'
+            : 'No market price found on TCGPlayer for this card';
+          details.push({ id: card.id, name: card.name, status: 'skipped', reason });
           continue;
         }
 
@@ -93,8 +107,17 @@ export async function GET(request: NextRequest) {
         }
         await db.update(cards).set(updateData).where(eq(cards.id, card.id));
         updated++;
+        details.push({
+          id: card.id,
+          name: card.name,
+          status: 'updated',
+          oldPrice: card.price,
+          newPrice,
+          marketPrice: market,
+        });
       } catch {
         failed++;
+        details.push({ id: card.id, name: card.name, status: 'failed', reason: 'Error while updating' });
       }
     }
 
@@ -106,6 +129,7 @@ export async function GET(request: NextRequest) {
       updated,
       failed,
       skipped,
+      details,
       batchProcessed: batch.length,
       total,
       offset,
