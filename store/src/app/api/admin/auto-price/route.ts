@@ -65,7 +65,13 @@ export async function GET(request: NextRequest) {
       }
 
       try {
-        const market = await resolveMarketPrice(card);
+        // Hard cap each card's lookup so a slow/hanging API call can never
+        // blow past the function's time budget (Promise.race guarantees this
+        // even if the underlying fetch/body-read ignores its abort signal).
+        const market = await Promise.race<number | null>([
+          resolveMarketPrice(card),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 4500)),
+        ]);
         if (market === null) {
           skipped++;
           continue;
