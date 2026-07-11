@@ -73,7 +73,7 @@ export default function PricingPage() {
 
     try {
       while (hasMore) {
-        const res = await fetch(`/api/admin/auto-price?batch=5&offset=${offset}&onlyAuto=1`);
+        const res = await fetch(`/api/admin/auto-price?batch=3&offset=${offset}&onlyAuto=1`);
         if (!res.ok) {
           let errMsg = `Server error (${res.status})`;
           try { const t = await res.text(); const j = JSON.parse(t); errMsg = j.error || errMsg; } catch {}
@@ -83,7 +83,7 @@ export default function PricingPage() {
         totalUpdated += data.updated || 0;
         totalFailed += data.failed || 0;
         hasMore = data.hasMore;
-        offset = data.nextOffset || offset + 5;
+        offset = data.nextOffset || offset + 3;
       }
       setSyncResult({ updated: totalUpdated, failed: totalFailed });
       await fetchPrices();

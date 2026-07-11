@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const batchSize = Math.min(parseInt(request.nextUrl.searchParams.get('batch') || '5', 10), 10);
+  const batchSize = Math.min(parseInt(request.nextUrl.searchParams.get('batch') || '3', 10), 5);
   const offset = parseInt(request.nextUrl.searchParams.get('offset') || '0', 10);
   const markupOverride = request.nextUrl.searchParams.get('markup');
   const globalMarkup = markupOverride !== null ? parseFloat(markupOverride) : null;
@@ -49,9 +49,19 @@ export async function GET(request: NextRequest) {
     for (let i = 0; i < batch.length; i++) {
       const card = batch[i];
 
-      // Delay between requests to avoid rate-limiting
+      // Small delay between requests to avoid rate-limiting
       if (i > 0) {
-        await delay(200);
+        await delay(100);
+      }
+
+      // Sealed products (ETBs, booster boxes, bundles, tins) aren't in the
+      // Pokemon TCG API — skip them to avoid slow, fruitless searches.
+      const isSealed =
+        card.rarity === 'Sealed Product' ||
+        card.condition === 'Factory Sealed';
+      if (isSealed) {
+        skipped++;
+        continue;
       }
 
       try {

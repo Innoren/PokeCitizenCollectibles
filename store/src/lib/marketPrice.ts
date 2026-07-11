@@ -16,6 +16,19 @@ function apiHeaders(): HeadersInit {
   return key ? { 'X-Api-Key': key } : {};
 }
 
+/** Fetch with a hard timeout so a single slow request can't hang the batch. */
+async function fetchWithTimeout(url: string, ms = 3000): Promise<Response | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  try {
+    return await fetch(url, { headers: apiHeaders(), signal: controller.signal });
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** Extract the best available TCGPlayer market price from an API card object. */
 export function extractMarketPrice(tcgCard: any): number | null {
   const p = tcgCard?.tcgplayer?.prices;
@@ -49,17 +62,15 @@ function isApiId(sku: string): boolean {
 export async function resolveMarketPrice(card: CardLike): Promise<number | null> {
   // 1) Direct id lookup when the SKU is a valid API id.
   if (card.sku && isApiId(card.sku)) {
-    try {
-      const res = await fetch(`${POKEMON_TCG_API}/cards/${encodeURIComponent(card.sku)}`, {
-        headers: apiHeaders(),
-      });
-      if (res.ok) {
+    const res = await fetchWithTimeout(`${POKEMON_TCG_API}/cards/${encodeURIComponent(card.sku)}`);
+    if (res && res.ok) {
+      try {
         const data = await res.json();
         const price = extractMarketPrice(data.data);
         if (price !== null) return price;
+      } catch {
+        /* fall through to name search */
       }
-    } catch {
-      /* fall through to name search */
     }
   }
 
@@ -74,12 +85,11 @@ export async function resolveMarketPrice(card: CardLike): Promise<number | null>
   queries.push(`name:"${cleanName}"`);
 
   for (const q of queries) {
+    const res = await fetchWithTimeout(
+      `${POKEMON_TCG_API}/cards?q=${encodeURIComponent(q)}&pageSize=5&orderBy=-set.releaseDate`
+    );
+    if (!res || !res.ok) continue;
     try {
-      const res = await fetch(
-        `${POKEMON_TCG_API}/cards?q=${encodeURIComponent(q)}&pageSize=5&orderBy=-set.releaseDate`,
-        { headers: apiHeaders() }
-      );
-      if (!res.ok) continue;
       const data = await res.json();
       const results: any[] = data.data || [];
       // Pick the first result that actually has a usable market price.
