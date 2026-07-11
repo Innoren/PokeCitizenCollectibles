@@ -17,7 +17,7 @@ function apiHeaders(): HeadersInit {
 }
 
 /** Fetch with a hard timeout so a single slow request can't hang the batch. */
-async function fetchWithTimeout(url: string, ms = 4000): Promise<Response | null> {
+async function fetchWithTimeout(url: string, ms = 3500): Promise<Response | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), ms);
   try {

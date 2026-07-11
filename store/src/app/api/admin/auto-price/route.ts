@@ -81,7 +81,7 @@ export async function GET(request: NextRequest) {
         const result = await Promise.race<{ price: number | null; reason: string }>([
           resolveMarketPriceDetailed(card),
           new Promise<{ price: null; reason: string }>((resolve) =>
-            setTimeout(() => resolve({ price: null, reason: 'timeout' }), 4500)
+            setTimeout(() => resolve({ price: null, reason: 'timeout' }), 11000)
           ),
         ]);
         const market = result.price;
