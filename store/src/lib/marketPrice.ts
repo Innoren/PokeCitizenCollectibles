@@ -75,6 +75,14 @@ function cleanCardName(name: string): string {
     .trim();
 }
 
+/** Extract the card number from a SKU like "159/086" or "084/217" -> "159". */
+function cardNumber(sku: string | null): string | null {
+  if (!sku) return null;
+  const m = sku.match(/^(\d+)\s*\/\s*\d+/);
+  if (!m) return null;
+  return m[1].replace(/^0+/, '') || '0'; // strip leading zeros
+}
+
 async function searchCards(q: string): Promise<any[] | null> {
   const res = await fetchWithTimeout(
     `${POKEMON_TCG_API}/cards?q=${encodeURIComponent(q)}&pageSize=20&orderBy=-set.releaseDate`
@@ -98,9 +106,23 @@ export async function resolveMarketPriceDetailed(card: CardLike): Promise<PriceR
   const cleanName = cleanCardName(card.name);
   if (!cleanName) return { price: null, reason: 'not_found' };
 
+  const num = cardNumber(card.sku);
   let anyResultsFound = false;
 
-  // 1) Prefer an exact set match (most accurate) — take a priced result if present.
+  // 1) Most precise: match by name + card number. This pins the exact card
+  //    (correct set + printing) even when our set name differs from the API's.
+  if (num) {
+    const numResults = await searchCards(`name:"${cleanName}" number:${num}`);
+    if (numResults && numResults.length > 0) {
+      anyResultsFound = true;
+      for (const r of numResults) {
+        const price = extractMarketPrice(r);
+        if (price !== null) return { price, reason: 'ok' };
+      }
+    }
+  }
+
+  // 2) Match by name + set name.
   if (card.setName) {
     const setResults = await searchCards(
       `name:"${cleanName}" set.name:"${card.setName.replace(/["\\]/g, '')}"`
@@ -114,7 +136,7 @@ export async function resolveMarketPriceDetailed(card: CardLike): Promise<PriceR
     }
   }
 
-  // 2) Fallback: any printing of this card that has a market price.
+  // 3) Fallback: any printing of this card that has a market price.
   const nameResults = await searchCards(`name:"${cleanName}"`);
   if (nameResults && nameResults.length > 0) {
     anyResultsFound = true;
