@@ -49,6 +49,7 @@ export default function InventoryPage() {
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<string | null>(null);
   const [globalMarkup, setGlobalMarkup] = useState('10');
+  const [progress, setProgress] = useState<{ processed: number; total: number; updated: number; skipped: number; eta: string } | null>(null);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -185,14 +186,24 @@ export default function InventoryPage() {
     setEditingPrice(null);
   };
 
+  const formatEta = (seconds: number): string => {
+    if (!isFinite(seconds) || seconds <= 0) return 'calculating...';
+    const m = Math.floor(seconds / 60);
+    const s = Math.round(seconds % 60);
+    if (m > 0) return `~${m}m ${s}s left`;
+    return `~${s}s left`;
+  };
+
   const syncAllPrices = async () => {
     setSyncing(true);
     setSyncResult(null);
+    setProgress({ processed: 0, total: cards.length || 0, updated: 0, skipped: 0, eta: 'calculating...' });
     let totalUpdated = 0;
     let totalFailed = 0;
     let totalSkipped = 0;
     let offset = 0;
     let hasMore = true;
+    const startTime = Date.now();
 
     const markupVal = parseFloat(globalMarkup);
     const markupParam = !isNaN(markupVal) ? `&markup=${markupVal}` : '';
@@ -211,12 +222,22 @@ export default function InventoryPage() {
         totalFailed += data.failed || 0;
         totalSkipped += data.skipped || 0;
         hasMore = data.hasMore;
+        const processed = Math.min(data.nextOffset || offset + 3, data.total);
         offset = data.nextOffset || offset + 3;
-        setSyncResult(`⏳ Processing... ${Math.min(offset, data.total)} of ${data.total} cards (${totalUpdated} updated so far)`);
+
+        // Estimate time remaining from average speed so far
+        const elapsed = (Date.now() - startTime) / 1000;
+        const rate = processed / elapsed; // cards per second
+        const remaining = data.total - processed;
+        const eta = rate > 0 ? formatEta(remaining / rate) : 'calculating...';
+
+        setProgress({ processed, total: data.total, updated: totalUpdated, skipped: totalSkipped, eta });
       }
+      setProgress(null);
       setSyncResult(`✓ Done! Updated ${totalUpdated} products at ${!isNaN(markupVal) ? markupVal : 10}% markup. ${totalSkipped > 0 ? `${totalSkipped} skipped (no market data).` : ''} ${totalFailed > 0 ? `${totalFailed} failed.` : ''}`);
       loadInventory();
     } catch (err: any) {
+      setProgress(null);
       setSyncResult(`✗ ${err.message || 'Sync failed'} (${totalUpdated} updated before error)`);
     }
     setSyncing(false);
@@ -437,12 +458,39 @@ export default function InventoryPage() {
               <button
                 onClick={syncAllPrices}
                 disabled={syncing}
-                className="px-5 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-semibold rounded-lg hover:from-green-600 hover:to-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
+                className="px-5 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-semibold rounded-lg hover:from-green-600 hover:to-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm whitespace-nowrap"
               >
-                {syncing ? '⏳ Syncing...' : '💰 Update All Prices'}
+                {syncing
+                  ? progress
+                    ? `⏳ ${progress.processed}/${progress.total}`
+                    : '⏳ Syncing...'
+                  : '💰 Update All Prices'}
               </button>
             </div>
           </div>
+
+          {/* Live progress bar */}
+          {progress && (
+            <div className="mb-4 p-4 rounded-xl bg-white border border-gray-200 shadow-sm">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-semibold text-gray-900">
+                  Updating prices… {progress.processed} / {progress.total}
+                </span>
+                <span className="text-sm font-medium text-gray-500">{progress.eta}</span>
+              </div>
+              <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-green-500 to-emerald-600 transition-all duration-300 ease-out"
+                  style={{ width: `${progress.total > 0 ? Math.round((progress.processed / progress.total) * 100) : 0}%` }}
+                />
+              </div>
+              <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+                <span>{progress.total > 0 ? Math.round((progress.processed / progress.total) * 100) : 0}% complete</span>
+                <span className="text-green-600 font-medium">✓ {progress.updated} updated</span>
+                {progress.skipped > 0 && <span className="text-gray-400">⊘ {progress.skipped} skipped</span>}
+              </div>
+            </div>
+          )}
 
           {syncResult && (
             <div className={`mb-4 p-3 rounded-lg text-sm font-medium ${
