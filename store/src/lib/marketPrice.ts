@@ -54,49 +54,81 @@ interface CardLike {
   setName?: string | null;
 }
 
+export type PriceReason = 'ok' | 'not_found' | 'no_price';
+
+export interface PriceResult {
+  price: number | null;
+  reason: PriceReason;
+}
+
 /** Returns true if the SKU matches the Pokemon TCG API id format (e.g. "swsh3-20"). */
 function isApiId(sku: string): boolean {
   return /^[a-zA-Z0-9]+-\d+[a-zA-Z]*$/.test(sku);
 }
 
-export async function resolveMarketPrice(card: CardLike): Promise<number | null> {
-  // 1) Direct id lookup when the SKU is a valid API id.
-  if (card.sku && isApiId(card.sku)) {
-    const res = await fetchWithTimeout(`${POKEMON_TCG_API}/cards/${encodeURIComponent(card.sku)}`);
-    if (res && res.ok) {
-      try {
-        const data = await res.json();
-        const price = extractMarketPrice(data.data);
-        if (price !== null) return price;
-      } catch {
-        /* fall through to name search */
-      }
-    }
-  }
+/** Strip parenthetical qualifiers like "(Alternate Art)" / "(JP)" and set-code suffixes. */
+function cleanCardName(name: string): string {
+  return name
+    .replace(/\([^)]*\)/g, '') // remove (...) qualifiers
+    .replace(/-\s*[A-Z]{2}\d+-\d+.*$/i, '') // remove trailing "- OP14-069" style codes
+    .replace(/["\\]/g, '')
+    .trim();
+}
 
-  // 2) Single name search (prefer set+name when available) — one request only,
-  //    to keep each card's lookup fast and predictable.
-  const cleanName = card.name.replace(/["\\]/g, '').trim();
-  if (!cleanName) return null;
-
-  const q = card.setName
-    ? `name:"${cleanName}" set.name:"${card.setName.replace(/["\\]/g, '')}"`
-    : `name:"${cleanName}"`;
-
+async function searchCards(q: string): Promise<any[] | null> {
   const res = await fetchWithTimeout(
-    `${POKEMON_TCG_API}/cards?q=${encodeURIComponent(q)}&pageSize=5&orderBy=-set.releaseDate`
+    `${POKEMON_TCG_API}/cards?q=${encodeURIComponent(q)}&pageSize=20&orderBy=-set.releaseDate`
   );
   if (!res || !res.ok) return null;
   try {
     const data = await res.json();
-    const results: any[] = data.data || [];
-    for (const r of results) {
-      const price = extractMarketPrice(r);
-      if (price !== null) return price;
-    }
+    return data.data || [];
   } catch {
     return null;
   }
+}
 
-  return null;
+/**
+ * Resolves a market price and explains the outcome:
+ *  - ok        : a market price was found
+ *  - not_found : the card name matched nothing (likely non-Pokemon, e.g. One Piece)
+ *  - no_price  : the card exists but no TCGPlayer market price is available yet
+ */
+export async function resolveMarketPriceDetailed(card: CardLike): Promise<PriceResult> {
+  const cleanName = cleanCardName(card.name);
+  if (!cleanName) return { price: null, reason: 'not_found' };
+
+  let anyResultsFound = false;
+
+  // 1) Prefer an exact set match (most accurate) — take a priced result if present.
+  if (card.setName) {
+    const setResults = await searchCards(
+      `name:"${cleanName}" set.name:"${card.setName.replace(/["\\]/g, '')}"`
+    );
+    if (setResults && setResults.length > 0) {
+      anyResultsFound = true;
+      for (const r of setResults) {
+        const price = extractMarketPrice(r);
+        if (price !== null) return { price, reason: 'ok' };
+      }
+    }
+  }
+
+  // 2) Fallback: any printing of this card that has a market price.
+  const nameResults = await searchCards(`name:"${cleanName}"`);
+  if (nameResults && nameResults.length > 0) {
+    anyResultsFound = true;
+    for (const r of nameResults) {
+      const price = extractMarketPrice(r);
+      if (price !== null) return { price, reason: 'ok' };
+    }
+  }
+
+  return { price: null, reason: anyResultsFound ? 'no_price' : 'not_found' };
+}
+
+/** Back-compat: returns just the price (or null). */
+export async function resolveMarketPrice(card: CardLike): Promise<number | null> {
+  const { price } = await resolveMarketPriceDetailed(card);
+  return price;
 }

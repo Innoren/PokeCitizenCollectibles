@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { cards } from '@/db/schema';
 import { eq, sql } from 'drizzle-orm';
-import { resolveMarketPrice } from '@/lib/marketPrice';
+import { resolveMarketPriceDetailed } from '@/lib/marketPrice';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -78,16 +78,24 @@ export async function GET(request: NextRequest) {
         // Hard cap each card's lookup so a slow/hanging API call can never
         // blow past the function's time budget (Promise.race guarantees this
         // even if the underlying fetch/body-read ignores its abort signal).
-        const market = await Promise.race<number | null>([
-          resolveMarketPrice(card),
-          new Promise<null>((resolve) => setTimeout(() => resolve(null), 4500)),
+        const result = await Promise.race<{ price: number | null; reason: string }>([
+          resolveMarketPriceDetailed(card),
+          new Promise<{ price: null; reason: string }>((resolve) =>
+            setTimeout(() => resolve({ price: null, reason: 'timeout' }), 4500)
+          ),
         ]);
+        const market = result.price;
         if (market === null) {
           skipped++;
-          const reason = !card.sku
-            ? 'No SKU and no market match found by name'
-            : 'No market price found on TCGPlayer for this card';
-          details.push({ id: card.id, name: card.name, status: 'skipped', reason });
+          const reasonMsg =
+            result.reason === 'not_found'
+              ? 'Not found in Pokémon TCG database (non-Pokémon card or name mismatch)'
+              : result.reason === 'no_price'
+              ? 'Card found, but TCGPlayer has no market price yet (often brand-new sets)'
+              : result.reason === 'timeout'
+              ? 'Lookup timed out — try again'
+              : 'No market price available';
+          details.push({ id: card.id, name: card.name, status: 'skipped', reason: reasonMsg });
           continue;
         }
 
