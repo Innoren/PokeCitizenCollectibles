@@ -124,22 +124,72 @@ export async function GET(request: NextRequest) {
   const globalMarkup = markupOverride !== null ? parseFloat(markupOverride) : null;
 
   try {
-    // ── CRON / FULL RUN ──────────────────────────────────────────────
-    // Vercel hits this once at midnight. Process every auto-priced card in
-    // one invocation using high parallelism so it fits within the time limit.
+    // ── CRON / FULL RUN (self-chaining) ──────────────────────────────
+    // Vercel hits this once at midnight (with ?cron=1). Each invocation
+    // processes as many cards as it can within a safe time budget, then
+    // triggers the next chunk so the whole catalog gets done without any
+    // single invocation exceeding Vercel's 60s limit.
     if (isCron) {
-      const allAuto = await db.select().from(cards).where(eq(cards.autoPrice, true)).orderBy(cards.id);
-      const results = await processConcurrently(allAuto, globalMarkup, 24);
-      const updated = results.filter((r) => r.status === 'updated').length;
-      const skipped = results.filter((r) => r.status === 'skipped').length;
-      const failed = results.filter((r) => r.status === 'failed').length;
+      const CONCURRENCY = 20;
+      const TIME_BUDGET_MS = 40000; // stay well under the 60s hard limit
+      const start = Date.now();
+
+      const totalRes = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(cards)
+        .where(eq(cards.autoPrice, true));
+      const total = Number(totalRes[0].count);
+
+      let offset = parseInt(params.get('offset') || '0', 10);
+      let updated = 0;
+      let skipped = 0;
+      let failed = 0;
+      let processed = 0;
+
+      while (offset < total && Date.now() - start < TIME_BUDGET_MS) {
+        const chunk = await db
+          .select()
+          .from(cards)
+          .where(eq(cards.autoPrice, true))
+          .orderBy(cards.id)
+          .limit(CONCURRENCY)
+          .offset(offset);
+        if (chunk.length === 0) break;
+
+        const results = await processConcurrently(chunk, globalMarkup, CONCURRENCY);
+        updated += results.filter((r) => r.status === 'updated').length;
+        skipped += results.filter((r) => r.status === 'skipped').length;
+        failed += results.filter((r) => r.status === 'failed').length;
+        offset += chunk.length;
+        processed += chunk.length;
+      }
+
+      const hasMore = offset < total;
+      if (hasMore) {
+        // Fire-and-forget the next chunk. We only need Vercel to accept the
+        // request; the spawned invocation runs independently of this one.
+        const markupQ = markupOverride !== null ? `&markup=${markupOverride}` : '';
+        const nextUrl = `${request.nextUrl.origin}/api/admin/auto-price?cron=1&offset=${offset}${markupQ}`;
+        const ctrl = new AbortController();
+        setTimeout(() => ctrl.abort(), 2500);
+        fetch(nextUrl, {
+          headers: auth ? { Authorization: auth } : {},
+          signal: ctrl.signal,
+        }).catch(() => {});
+        // Give Vercel a moment to receive and start the next invocation.
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+
       return NextResponse.json({
         ok: true,
         mode: 'cron',
-        total: allAuto.length,
+        total,
+        processedThisRun: processed,
         updated,
         skipped,
         failed,
+        offset,
+        hasMore,
         syncedAt: new Date().toISOString(),
       });
     }
