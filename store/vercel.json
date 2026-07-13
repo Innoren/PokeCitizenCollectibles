@@ -5,7 +5,7 @@
       "schedule": "0 8 * * *"
     },
     {
-      "path": "/api/admin/auto-price?onlyAuto=1&batch=50",
+      "path": "/api/admin/auto-price?cron=1",
       "schedule": "0 0 * * *"
     }
   ]

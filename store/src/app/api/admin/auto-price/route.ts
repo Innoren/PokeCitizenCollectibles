@@ -12,131 +12,158 @@ function roundPrice(n: number): string {
   return (Math.round(n * 100) / 100).toFixed(2);
 }
 
-function delay(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+type CardRow = typeof cards.$inferSelect;
+
+interface CardResult {
+  id: number;
+  name: string;
+  status: 'updated' | 'skipped' | 'failed';
+  reason?: string;
+  oldPrice?: string;
+  newPrice?: string;
+  marketPrice?: number;
+}
+
+/** Price a single card (or sealed product) and persist it. Hard-capped in time. */
+async function priceOneCard(card: CardRow, globalMarkup: number | null, now: Date): Promise<CardResult> {
+  const isSealed = card.rarity === 'Sealed Product' || card.condition === 'Factory Sealed';
+
+  try {
+    let market: number | null;
+    let reason = 'ok';
+
+    if (isSealed) {
+      market = await Promise.race<number | null>([
+        resolveSealedPrice(card),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 8000)),
+      ]);
+      if (market === null) reason = 'sealed_not_found';
+    } else {
+      const result = await Promise.race<{ price: number | null; reason: string }>([
+        resolveMarketPriceDetailed(card),
+        new Promise<{ price: null; reason: string }>((resolve) =>
+          setTimeout(() => resolve({ price: null, reason: 'timeout' }), 8000)
+        ),
+      ]);
+      market = result.price;
+      reason = result.reason;
+    }
+
+    if (market === null) {
+      const reasonMsg =
+        reason === 'sealed_not_found'
+          ? 'Sealed product not found on TCGplayer (check set/product name)'
+          : reason === 'not_found'
+          ? 'Not found in Pokémon TCG database (non-Pokémon card or name mismatch)'
+          : reason === 'no_price'
+          ? 'Card found, but TCGPlayer has no market price yet (often brand-new sets)'
+          : reason === 'timeout'
+          ? 'Lookup timed out — try again'
+          : 'No market price available';
+      return { id: card.id, name: card.name, status: 'skipped', reason: reasonMsg };
+    }
+
+    const markup =
+      globalMarkup !== null && !isNaN(globalMarkup)
+        ? globalMarkup
+        : parseFloat(card.priceMarkup ?? '10') || 0;
+    const newPrice = roundPrice(market * (1 + markup / 100));
+
+    const updateData: Record<string, any> = {
+      price: newPrice,
+      lastMarketPrice: roundPrice(market),
+      lastPriceSync: now,
+      autoPrice: true,
+    };
+    if (globalMarkup !== null && !isNaN(globalMarkup)) {
+      updateData.priceMarkup = globalMarkup.toFixed(2);
+    }
+    await db.update(cards).set(updateData).where(eq(cards.id, card.id));
+
+    return {
+      id: card.id,
+      name: card.name,
+      status: 'updated',
+      oldPrice: card.price,
+      newPrice,
+      marketPrice: market,
+    };
+  } catch {
+    return { id: card.id, name: card.name, status: 'failed', reason: 'Error while updating' };
+  }
+}
+
+/** Process a list of cards with bounded concurrency (parallel for speed). */
+async function processConcurrently(
+  list: CardRow[],
+  globalMarkup: number | null,
+  concurrency: number
+): Promise<CardResult[]> {
+  const now = new Date();
+  const results: CardResult[] = [];
+  for (let i = 0; i < list.length; i += concurrency) {
+    const chunk = list.slice(i, i + concurrency);
+    const chunkResults = await Promise.all(chunk.map((c) => priceOneCard(c, globalMarkup, now)));
+    results.push(...chunkResults);
+  }
+  return results;
 }
 
 export async function GET(request: NextRequest) {
   const secret = process.env.CRON_SECRET;
   const auth = request.headers.get('authorization');
-  if (secret && auth && auth !== `Bearer ${secret}`) {
+  const isCronAuthed = !!secret && auth === `Bearer ${secret}`;
+  // Block only when a secret is set AND an (incorrect) auth header is provided.
+  if (secret && auth && !isCronAuthed) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const batchSize = Math.min(parseInt(request.nextUrl.searchParams.get('batch') || '2', 10), 5);
-  const offset = parseInt(request.nextUrl.searchParams.get('offset') || '0', 10);
-  const markupOverride = request.nextUrl.searchParams.get('markup');
+  const params = request.nextUrl.searchParams;
+  const isCron = params.get('cron') === '1' || (isCronAuthed && !params.has('offset'));
+  const markupOverride = params.get('markup');
   const globalMarkup = markupOverride !== null ? parseFloat(markupOverride) : null;
-  const onlyAuto = request.nextUrl.searchParams.get('onlyAuto') === '1';
 
   try {
-    // Get total count (filtered if onlyAuto)
+    // ── CRON / FULL RUN ──────────────────────────────────────────────
+    // Vercel hits this once at midnight. Process every auto-priced card in
+    // one invocation using high parallelism so it fits within the time limit.
+    if (isCron) {
+      const allAuto = await db.select().from(cards).where(eq(cards.autoPrice, true)).orderBy(cards.id);
+      const results = await processConcurrently(allAuto, globalMarkup, 24);
+      const updated = results.filter((r) => r.status === 'updated').length;
+      const skipped = results.filter((r) => r.status === 'skipped').length;
+      const failed = results.filter((r) => r.status === 'failed').length;
+      return NextResponse.json({
+        ok: true,
+        mode: 'cron',
+        total: allAuto.length,
+        updated,
+        skipped,
+        failed,
+        syncedAt: new Date().toISOString(),
+      });
+    }
+
+    // ── MANUAL / BATCHED (client-driven loop) ────────────────────────
+    const batchSize = Math.min(parseInt(params.get('batch') || '8', 10), 12);
+    const offset = parseInt(params.get('offset') || '0', 10);
+    const onlyAuto = params.get('onlyAuto') === '1';
+
     const countResult = onlyAuto
       ? await db.select({ count: sql<number>`count(*)` }).from(cards).where(eq(cards.autoPrice, true))
       : await db.select({ count: sql<number>`count(*)` }).from(cards);
     const total = Number(countResult[0].count);
 
-    // Only fetch the batch we need
     const baseQuery = db.select().from(cards);
     const batch = onlyAuto
       ? await baseQuery.where(eq(cards.autoPrice, true)).orderBy(cards.id).limit(batchSize).offset(offset)
       : await baseQuery.orderBy(cards.id).limit(batchSize).offset(offset);
 
-    let updated = 0;
-    let failed = 0;
-    let skipped = 0;
-    const now = new Date();
-    const details: Array<{
-      id: number;
-      name: string;
-      status: 'updated' | 'skipped' | 'failed';
-      reason?: string;
-      oldPrice?: string;
-      newPrice?: string;
-      marketPrice?: number;
-    }> = [];
-
-    for (let i = 0; i < batch.length; i++) {
-      const card = batch[i];
-
-      // Small delay between requests to avoid rate-limiting
-      if (i > 0) {
-        await delay(100);
-      }
-
-      const isSealed =
-        card.rarity === 'Sealed Product' ||
-        card.condition === 'Factory Sealed';
-
-      try {
-        // Sealed products (ETBs, boxes, bundles) come from TCGCSV; individual
-        // cards from the Pokémon TCG API. Both are hard-capped by Promise.race
-        // so a slow/hanging call can never exceed the function's time budget.
-        let market: number | null;
-        let reason = 'ok';
-
-        if (isSealed) {
-          market = await Promise.race<number | null>([
-            resolveSealedPrice(card),
-            new Promise<null>((resolve) => setTimeout(() => resolve(null), 11000)),
-          ]);
-          if (market === null) reason = 'sealed_not_found';
-        } else {
-          const result = await Promise.race<{ price: number | null; reason: string }>([
-            resolveMarketPriceDetailed(card),
-            new Promise<{ price: null; reason: string }>((resolve) =>
-              setTimeout(() => resolve({ price: null, reason: 'timeout' }), 11000)
-            ),
-          ]);
-          market = result.price;
-          reason = result.reason;
-        }
-
-        if (market === null) {
-          skipped++;
-          const reasonMsg =
-            reason === 'sealed_not_found'
-              ? 'Sealed product not found on TCGplayer (check set/product name)'
-              : reason === 'not_found'
-              ? 'Not found in Pokémon TCG database (non-Pokémon card or name mismatch)'
-              : reason === 'no_price'
-              ? 'Card found, but TCGPlayer has no market price yet (often brand-new sets)'
-              : reason === 'timeout'
-              ? 'Lookup timed out — try again'
-              : 'No market price available';
-          details.push({ id: card.id, name: card.name, status: 'skipped', reason: reasonMsg });
-          continue;
-        }
-
-        const markup = (globalMarkup !== null && !isNaN(globalMarkup))
-          ? globalMarkup
-          : (parseFloat(card.priceMarkup ?? '10') || 0);
-        const newPrice = roundPrice(market * (1 + markup / 100));
-
-        const updateData: Record<string, any> = {
-          price: newPrice,
-          lastMarketPrice: roundPrice(market),
-          lastPriceSync: now,
-          autoPrice: true,
-        };
-        if (globalMarkup !== null && !isNaN(globalMarkup)) {
-          updateData.priceMarkup = globalMarkup.toFixed(2);
-        }
-        await db.update(cards).set(updateData).where(eq(cards.id, card.id));
-        updated++;
-        details.push({
-          id: card.id,
-          name: card.name,
-          status: 'updated',
-          oldPrice: card.price,
-          newPrice,
-          marketPrice: market,
-        });
-      } catch {
-        failed++;
-        details.push({ id: card.id, name: card.name, status: 'failed', reason: 'Error while updating' });
-      }
-    }
+    // Process the whole batch in parallel — big speed win vs sequential.
+    const details = await processConcurrently(batch, globalMarkup, batchSize);
+    const updated = details.filter((r) => r.status === 'updated').length;
+    const skipped = details.filter((r) => r.status === 'skipped').length;
+    const failed = details.filter((r) => r.status === 'failed').length;
 
     const nextOffset = offset + batchSize;
     const hasMore = nextOffset < total;
@@ -152,7 +179,7 @@ export async function GET(request: NextRequest) {
       offset,
       nextOffset: hasMore ? nextOffset : null,
       hasMore,
-      syncedAt: now.toISOString(),
+      syncedAt: new Date().toISOString(),
     });
   } catch (error: any) {
     console.error('Auto-price sync error:', error);
