@@ -50,6 +50,14 @@ async function priceOneCard(card: CardRow, globalMarkup: number | null, now: Dat
     }
 
     if (market === null) {
+      // Record the attempt time (not the price) so the nightly stalest-first
+      // rotation moves this card to the back and doesn't retry it every night
+      // ahead of cards that can actually be priced.
+      try {
+        await db.update(cards).set({ lastPriceSync: now }).where(eq(cards.id, card.id));
+      } catch {
+        /* non-fatal */
+      }
       const reasonMsg =
         reason === 'sealed_not_found'
           ? 'Sealed product not found on TCGplayer (check set/product name)'
@@ -124,14 +132,16 @@ export async function GET(request: NextRequest) {
   const globalMarkup = markupOverride !== null ? parseFloat(markupOverride) : null;
 
   try {
-    // ── CRON / FULL RUN (self-chaining) ──────────────────────────────
-    // Vercel hits this once at midnight (with ?cron=1). Each invocation
-    // processes as many cards as it can within a safe time budget, then
-    // triggers the next chunk so the whole catalog gets done without any
-    // single invocation exceeding Vercel's 60s limit.
+    // ── CRON / NIGHTLY RUN (stalest-first, time-boxed) ───────────────
+    // Vercel hits this once at midnight (?cron=1). We refresh as many cards
+    // as fit in a safe time budget, prioritising the ones that haven't been
+    // updated in the longest time (never-synced first). This is fully
+    // reliable (no fragile self-chaining) and cycles through the whole
+    // catalog over consecutive nights; prices change little day-to-day.
+    // For an immediate full refresh, use the "Update All Prices" button.
     if (isCron) {
-      const CONCURRENCY = 20;
-      const TIME_BUDGET_MS = 40000; // stay well under the 60s hard limit
+      const CONCURRENCY = 25;
+      const TIME_BUDGET_MS = 48000; // stay safely under the 60s hard limit
       const start = Date.now();
 
       const totalRes = await db
@@ -140,44 +150,29 @@ export async function GET(request: NextRequest) {
         .where(eq(cards.autoPrice, true));
       const total = Number(totalRes[0].count);
 
-      let offset = parseInt(params.get('offset') || '0', 10);
+      // Fetch a fixed list of the stalest cards up front (avoids re-querying
+      // while we mutate the sort key). 300 is far more than fits in the time
+      // budget, so it just acts as a safety cap.
+      const candidates = await db
+        .select()
+        .from(cards)
+        .where(eq(cards.autoPrice, true))
+        .orderBy(sql`${cards.lastPriceSync} ASC NULLS FIRST`, cards.id)
+        .limit(300);
+
       let updated = 0;
       let skipped = 0;
       let failed = 0;
       let processed = 0;
 
-      while (offset < total && Date.now() - start < TIME_BUDGET_MS) {
-        const chunk = await db
-          .select()
-          .from(cards)
-          .where(eq(cards.autoPrice, true))
-          .orderBy(cards.id)
-          .limit(CONCURRENCY)
-          .offset(offset);
-        if (chunk.length === 0) break;
-
+      for (let i = 0; i < candidates.length; i += CONCURRENCY) {
+        if (Date.now() - start >= TIME_BUDGET_MS) break;
+        const chunk = candidates.slice(i, i + CONCURRENCY);
         const results = await processConcurrently(chunk, globalMarkup, CONCURRENCY);
         updated += results.filter((r) => r.status === 'updated').length;
         skipped += results.filter((r) => r.status === 'skipped').length;
         failed += results.filter((r) => r.status === 'failed').length;
-        offset += chunk.length;
         processed += chunk.length;
-      }
-
-      const hasMore = offset < total;
-      if (hasMore) {
-        // Fire-and-forget the next chunk. We only need Vercel to accept the
-        // request; the spawned invocation runs independently of this one.
-        const markupQ = markupOverride !== null ? `&markup=${markupOverride}` : '';
-        const nextUrl = `${request.nextUrl.origin}/api/admin/auto-price?cron=1&offset=${offset}${markupQ}`;
-        const ctrl = new AbortController();
-        setTimeout(() => ctrl.abort(), 2500);
-        fetch(nextUrl, {
-          headers: auth ? { Authorization: auth } : {},
-          signal: ctrl.signal,
-        }).catch(() => {});
-        // Give Vercel a moment to receive and start the next invocation.
-        await new Promise((r) => setTimeout(r, 1500));
       }
 
       return NextResponse.json({
@@ -188,8 +183,7 @@ export async function GET(request: NextRequest) {
         updated,
         skipped,
         failed,
-        offset,
-        hasMore,
+        remaining: Math.max(0, total - processed),
         syncedAt: new Date().toISOString(),
       });
     }
