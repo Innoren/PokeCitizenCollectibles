@@ -3,6 +3,7 @@ import { db } from '@/db';
 import { cards } from '@/db/schema';
 import { eq, sql } from 'drizzle-orm';
 import { resolveMarketPriceDetailed } from '@/lib/marketPrice';
+import { resolveSealedPrice } from '@/lib/sealedPrice';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -63,36 +64,44 @@ export async function GET(request: NextRequest) {
         await delay(100);
       }
 
-      // Sealed products (ETBs, booster boxes, bundles, tins) aren't in the
-      // Pokemon TCG API — skip them to avoid slow, fruitless searches.
       const isSealed =
         card.rarity === 'Sealed Product' ||
         card.condition === 'Factory Sealed';
-      if (isSealed) {
-        skipped++;
-        details.push({ id: card.id, name: card.name, status: 'skipped', reason: 'Sealed product — no market data in TCG API (price manually)' });
-        continue;
-      }
 
       try {
-        // Hard cap each card's lookup so a slow/hanging API call can never
-        // blow past the function's time budget (Promise.race guarantees this
-        // even if the underlying fetch/body-read ignores its abort signal).
-        const result = await Promise.race<{ price: number | null; reason: string }>([
-          resolveMarketPriceDetailed(card),
-          new Promise<{ price: null; reason: string }>((resolve) =>
-            setTimeout(() => resolve({ price: null, reason: 'timeout' }), 11000)
-          ),
-        ]);
-        const market = result.price;
+        // Sealed products (ETBs, boxes, bundles) come from TCGCSV; individual
+        // cards from the Pokémon TCG API. Both are hard-capped by Promise.race
+        // so a slow/hanging call can never exceed the function's time budget.
+        let market: number | null;
+        let reason = 'ok';
+
+        if (isSealed) {
+          market = await Promise.race<number | null>([
+            resolveSealedPrice(card),
+            new Promise<null>((resolve) => setTimeout(() => resolve(null), 11000)),
+          ]);
+          if (market === null) reason = 'sealed_not_found';
+        } else {
+          const result = await Promise.race<{ price: number | null; reason: string }>([
+            resolveMarketPriceDetailed(card),
+            new Promise<{ price: null; reason: string }>((resolve) =>
+              setTimeout(() => resolve({ price: null, reason: 'timeout' }), 11000)
+            ),
+          ]);
+          market = result.price;
+          reason = result.reason;
+        }
+
         if (market === null) {
           skipped++;
           const reasonMsg =
-            result.reason === 'not_found'
+            reason === 'sealed_not_found'
+              ? 'Sealed product not found on TCGplayer (check set/product name)'
+              : reason === 'not_found'
               ? 'Not found in Pokémon TCG database (non-Pokémon card or name mismatch)'
-              : result.reason === 'no_price'
+              : reason === 'no_price'
               ? 'Card found, but TCGPlayer has no market price yet (often brand-new sets)'
-              : result.reason === 'timeout'
+              : reason === 'timeout'
               ? 'Lookup timed out — try again'
               : 'No market price available';
           details.push({ id: card.id, name: card.name, status: 'skipped', reason: reasonMsg });
