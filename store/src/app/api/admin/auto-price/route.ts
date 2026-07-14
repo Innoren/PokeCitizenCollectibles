@@ -6,7 +6,7 @@ import { resolveMarketPriceDetailed } from '@/lib/marketPrice';
 import { resolveSealedPrice } from '@/lib/sealedPrice';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 function roundPrice(n: number): string {
   return (Math.round(n * 100) / 100).toFixed(2);
@@ -141,8 +141,6 @@ export async function GET(request: NextRequest) {
     // For an immediate full refresh, use the "Update All Prices" button.
     if (isCron) {
       const CONCURRENCY = 25;
-      const TIME_BUDGET_MS = 48000; // stay safely under the 60s hard limit
-      const start = Date.now();
 
       const totalRes = await db
         .select({ count: sql<number>`count(*)` })
@@ -150,40 +148,27 @@ export async function GET(request: NextRequest) {
         .where(eq(cards.autoPrice, true));
       const total = Number(totalRes[0].count);
 
-      // Fetch a fixed list of the stalest cards up front (avoids re-querying
-      // while we mutate the sort key). 300 is far more than fits in the time
-      // budget, so it just acts as a safety cap.
-      const candidates = await db
+      // Fetch all auto-priced cards at once (safe with Pro's 300s budget).
+      const allCards = await db
         .select()
         .from(cards)
         .where(eq(cards.autoPrice, true))
-        .orderBy(sql`${cards.lastPriceSync} ASC NULLS FIRST`, cards.id)
-        .limit(300);
+        .orderBy(cards.id);
 
-      let updated = 0;
-      let skipped = 0;
-      let failed = 0;
-      let processed = 0;
-
-      for (let i = 0; i < candidates.length; i += CONCURRENCY) {
-        if (Date.now() - start >= TIME_BUDGET_MS) break;
-        const chunk = candidates.slice(i, i + CONCURRENCY);
-        const results = await processConcurrently(chunk, globalMarkup, CONCURRENCY);
-        updated += results.filter((r) => r.status === 'updated').length;
-        skipped += results.filter((r) => r.status === 'skipped').length;
-        failed += results.filter((r) => r.status === 'failed').length;
-        processed += chunk.length;
-      }
+      const results = await processConcurrently(allCards, globalMarkup, CONCURRENCY);
+      const updated = results.filter((r) => r.status === 'updated').length;
+      const skipped = results.filter((r) => r.status === 'skipped').length;
+      const failed = results.filter((r) => r.status === 'failed').length;
 
       return NextResponse.json({
         ok: true,
         mode: 'cron',
         total,
-        processedThisRun: processed,
+        processedThisRun: allCards.length,
         updated,
         skipped,
         failed,
-        remaining: Math.max(0, total - processed),
+        remaining: 0,
         syncedAt: new Date().toISOString(),
       });
     }
