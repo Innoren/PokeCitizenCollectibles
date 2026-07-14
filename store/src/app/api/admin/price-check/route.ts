@@ -5,7 +5,7 @@ import { desc } from 'drizzle-orm';
 import { resolveMarketPrice } from '@/lib/marketPrice';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 interface PriceAlert {
   id: number;

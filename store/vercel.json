@@ -2,11 +2,11 @@
   "crons": [
     {
       "path": "/api/admin/backup",
-      "schedule": "0 8 * * *"
+      "schedule": "0 8,20 * * *"
     },
     {
       "path": "/api/admin/auto-price?cron=1",
-      "schedule": "0 0 * * *"
+      "schedule": "0 0,12 * * *"
     }
   ]
 }

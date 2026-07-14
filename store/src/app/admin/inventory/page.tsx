@@ -215,7 +215,7 @@ export default function InventoryPage() {
 
     try {
       while (hasMore) {
-        const res = await fetch(`/api/admin/auto-price?batch=8&offset=${offset}${markupParam}`);
+        const res = await fetch(`/api/admin/auto-price?batch=12&offset=${offset}${markupParam}`);
         if (!res.ok) {
           const text = await res.text();
           let errMsg = 'Sync failed';
@@ -228,8 +228,8 @@ export default function InventoryPage() {
         totalSkipped += data.skipped || 0;
         if (Array.isArray(data.details)) allDetails.push(...data.details);
         hasMore = data.hasMore;
-        const processed = Math.min(data.nextOffset || offset + 8, data.total);
-        offset = data.nextOffset || offset + 8;
+        const processed = Math.min(data.nextOffset || offset + 12, data.total);
+        offset = data.nextOffset || offset + 12;
 
         // Estimate time remaining from average speed so far
         const elapsed = (Date.now() - startTime) / 1000;

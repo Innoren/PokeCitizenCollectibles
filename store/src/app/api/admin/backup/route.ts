@@ -16,8 +16,7 @@ import { createInventorySnapshot, snapshotFileName } from '@/lib/backup';
  */
 
 export const dynamic = 'force-dynamic';
-// Allow up to 60s for larger inventories.
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 function isAuthorized(request: NextRequest): boolean {
   const secret = process.env.CRON_SECRET;
