@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { resolveMarketPrice } from '@/lib/marketPrice';
+import { resolveMarketPriceDetailed } from '@/lib/marketPrice';
 import { resolveSealedPrice } from '@/lib/sealedPrice';
 
 export const dynamic = 'force-dynamic';
@@ -10,10 +10,11 @@ const CARDGRADER_API = 'https://cardgrader.ai/v1';
 /**
  * POST /api/admin/scan
  *
- * Accepts a card photo (multipart form with "file" field OR JSON body with "imageUrl").
- * Sends it to CardGrader.AI for identification, then looks up the market price.
+ * Identifies a card from front + back photos via CardGrader.AI, then prices it
+ * using our own market-pricing system (Pokemon TCG API + TCGCSV).
  *
- * Returns: { card: { name, set, number, rarity, variant, imageUrl, marketPrice } }
+ * Body (JSON): { frontImageUrl, backImageUrl }  — both required by CardGrader.
+ * Returns: { card: { name, setName, number, rarity, variant, condition, marketPrice } }
  */
 export async function POST(request: NextRequest) {
   const apiKey = process.env.CARDGRADER_API_KEY;
@@ -22,93 +23,58 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    let scanId: string;
-
-    const contentType = request.headers.get('content-type') || '';
-
-    if (contentType.includes('multipart/form-data')) {
-      // File upload
-      const formData = await request.formData();
-      const file = formData.get('file') as File | null;
-      if (!file) {
-        return NextResponse.json({ error: 'No file provided' }, { status: 400 });
-      }
-      // Upload to CardGrader
-      const cgForm = new FormData();
-      cgForm.append('front', file);
-      cgForm.append('modules', JSON.stringify(['identify', 'market']));
-
-      const scanRes = await fetch(`${CARDGRADER_API}/scans`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${apiKey}` },
-        body: cgForm,
-      });
-
-      if (!scanRes.ok) {
-        const err = await scanRes.json().catch(() => ({}));
-        return NextResponse.json({
-          error: err.detail || err.title || `CardGrader error (${scanRes.status})`,
-        }, { status: scanRes.status });
-      }
-
-      const scanData = await scanRes.json();
-      scanId = scanData.id || scanData.scanId;
-    } else {
-      // JSON body with imageUrl
-      const body = await request.json();
-      if (!body.imageUrl) {
-        return NextResponse.json({ error: 'Provide a file or imageUrl' }, { status: 400 });
-      }
-
-      const scanRes = await fetch(`${CARDGRADER_API}/scans`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          frontUrl: body.imageUrl,
-          modules: ['identify', 'market'],
-        }),
-      });
-
-      if (!scanRes.ok) {
-        const err = await scanRes.json().catch(() => ({}));
-        return NextResponse.json({
-          error: err.detail || err.title || `CardGrader error (${scanRes.status})`,
-        }, { status: scanRes.status });
-      }
-
-      const scanData = await scanRes.json();
-      scanId = scanData.id || scanData.scanId;
+    const body = await request.json();
+    const { frontImageUrl, backImageUrl } = body;
+    if (!frontImageUrl) {
+      return NextResponse.json({ error: 'frontImageUrl is required' }, { status: 400 });
     }
 
+    // Start the scan (identify only — we price with our own system).
+    const scanRes = await fetch(`${CARDGRADER_API}/scans`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        frontImageUrl,
+        // CardGrader requires a back image; fall back to the front if only one
+        // was provided (identification relies mainly on the front anyway).
+        backImageUrl: backImageUrl || frontImageUrl,
+        modules: ['identify'],
+      }),
+    });
+
+    if (!scanRes.ok) {
+      const err = await scanRes.json().catch(() => ({}));
+      return NextResponse.json(
+        { error: err.detail || err.title || `CardGrader error (${scanRes.status})` },
+        { status: scanRes.status }
+      );
+    }
+
+    const scanData = await scanRes.json();
+    const scanId = scanData.id;
     if (!scanId) {
       return NextResponse.json({ error: 'Failed to start scan' }, { status: 500 });
     }
 
-    // Poll for result (CardGrader is async — typically 30-120s)
-    const maxWait = 180000; // 3 minutes
+    // Poll for completion (CardGrader is queue-backed, ~30-120s).
+    const maxWait = 180000;
     const pollInterval = 3000;
-    const started = Date.now();
+    const startedAt = Date.now();
     let result: any = null;
 
-    while (Date.now() - started < maxWait) {
+    while (Date.now() - startedAt < maxWait) {
       await new Promise((r) => setTimeout(r, pollInterval));
-
       const pollRes = await fetch(`${CARDGRADER_API}/scans/${scanId}`, {
         headers: { Authorization: `Bearer ${apiKey}` },
       });
-
       if (!pollRes.ok) continue;
       const pollData = await pollRes.json();
-
-      if (pollData.status === 'completed') {
-        result = pollData;
-        break;
-      }
+      if (pollData.status === 'completed') { result = pollData; break; }
       if (pollData.status === 'failed') {
-        return NextResponse.json({ error: 'Card identification failed' }, { status: 500 });
+        return NextResponse.json({ error: 'Card identification failed' }, { status: 502 });
       }
     }
 
@@ -116,40 +82,38 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Scan timed out — try again' }, { status: 504 });
     }
 
-    // Extract identification results
-    const identify = result.identify || result.identification || {};
-    const market = result.market || {};
+    const id = result.identification || {};
+    const name: string = id.name || 'Unknown Card';
+    const setName: string = id.set || '';
+    const number: string = id.number || '';
+    const parallel: string = id.parallel && id.parallel.toLowerCase() !== 'base' ? id.parallel : 'Normal';
 
-    const cardName = identify.name || identify.cardName || 'Unknown Card';
-    const setName = identify.set || identify.setName || '';
-    const number = identify.number || identify.cardNumber || '';
-    const variant = identify.variant || identify.parallel || 'Normal';
-    const rarity = identify.rarity || '';
+    // Price it with OUR existing system (same logic the auto-pricer uses).
+    const priceRes = await resolveMarketPriceDetailed({
+      sku: number || null,
+      name,
+      setName,
+    });
+    let marketPrice: number | null = priceRes.price;
+    let priceReason = priceRes.reason;
 
-    // Try to get market price from CardGrader response first
-    let marketPrice =
-      market.rawValue?.mid ??
-      market.rawValue?.low ??
-      market.value?.raw ??
-      null;
-
-    // Fallback: our own market price lookup if CardGrader didn't provide one
-    if (marketPrice === null) {
-      const sku = number ? `${number}` : null;
-      marketPrice = await resolveMarketPrice({ sku, name: cardName, setName });
+    // If nothing found and it looks like sealed product, try TCGCSV.
+    if (marketPrice === null && /elite trainer|booster box|booster bundle|collection box|tin|blister/i.test(name)) {
+      marketPrice = await resolveSealedPrice({ name, setName });
+      if (marketPrice !== null) priceReason = 'ok';
     }
 
     return NextResponse.json({
       card: {
-        name: cardName,
+        name,
         setName,
         number,
-        rarity,
-        variant,
-        marketPrice: marketPrice !== null ? parseFloat(String(marketPrice)).toFixed(2) : null,
-        condition: 'Near Mint', // Default assumption for scanned cards
+        rarity: '', // CardGrader doesn't return rarity; admin can set it
+        variant: parallel,
+        condition: 'Near Mint',
+        marketPrice: marketPrice !== null ? marketPrice.toFixed(2) : null,
+        priceReason,
       },
-      raw: { identify, market },
     });
   } catch (error: any) {
     console.error('Scan error:', error);

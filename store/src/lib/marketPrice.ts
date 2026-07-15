@@ -75,10 +75,12 @@ function cleanCardName(name: string): string {
     .trim();
 }
 
-/** Extract the card number from a SKU like "159/086" or "084/217" -> "159". */
+/** Extract the card number from a SKU like "159/086", "084/217", or bare "159" -> "159". */
 function cardNumber(sku: string | null): string | null {
   if (!sku) return null;
-  const m = sku.match(/^(\d+)\s*\/\s*\d+/);
+  // Leading digits (handles "159/086", "159", "159a"); ignores letter-prefixed
+  // codes like "OP14-069" (non-Pokémon), which correctly return null.
+  const m = sku.trim().match(/^(\d+)/);
   if (!m) return null;
   return m[1].replace(/^0+/, '') || '0'; // strip leading zeros
 }
