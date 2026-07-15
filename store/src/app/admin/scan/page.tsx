@@ -244,14 +244,15 @@ export default function ScanPage() {
                 <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
                   <tr>
                     <th className="px-2 py-2.5 text-center w-8">✓</th>
-                    <th className="px-2 py-2.5 text-left w-16">Photo</th>
+                    <th className="px-2 py-2.5 text-left w-16">Front</th>
                     <th className="px-2 py-2.5 text-left">Card Name</th>
                     <th className="px-2 py-2.5 text-left w-20">#</th>
                     <th className="px-2 py-2.5 text-left hidden md:table-cell">Set</th>
-                    <th className="px-2 py-2.5 text-left hidden lg:table-cell w-24">Rarity</th>
                     <th className="px-2 py-2.5 text-right w-20">Market</th>
                     <th className="px-2 py-2.5 text-right w-24">Price</th>
                     <th className="px-2 py-2.5 text-center w-14">Qty</th>
+                    <th className="px-2 py-2.5 text-left w-28">Condition</th>
+                    <th className="px-2 py-2.5 text-left hidden lg:table-cell w-24">Rarity</th>
                     <th className="px-2 py-2.5 text-center w-16">Status</th>
                   </tr>
                 </thead>
@@ -280,12 +281,6 @@ export default function ScanPage() {
                         <input value={r.setName} onChange={(e) => updateRow(r.index, 'setName', e.target.value)}
                           className="w-full px-2 py-1 border border-gray-200 rounded text-sm" placeholder="Auto" />
                       </td>
-                      <td className="px-2 py-1.5 hidden lg:table-cell">
-                        <select value={r.rarity} onChange={(e) => updateRow(r.index, 'rarity', e.target.value)}
-                          className="w-full px-1 py-1 border border-gray-200 rounded text-xs">
-                          {RARITIES.map((x) => <option key={x}>{x}</option>)}
-                        </select>
-                      </td>
                       <td className="px-2 py-1.5 text-right text-xs text-gray-500">
                         {r.marketPrice ? `$${r.marketPrice}` : '—'}
                       </td>
@@ -299,6 +294,23 @@ export default function ScanPage() {
                       <td className="px-2 py-1.5 text-center">
                         <input value={r.stock} onChange={(e) => updateRow(r.index, 'stock', e.target.value)}
                           className="w-10 px-1 py-1 border border-gray-200 rounded text-center text-xs" />
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <select value={r.condition} onChange={(e) => updateRow(r.index, 'condition', e.target.value)}
+                          className="w-full px-1 py-1 border border-gray-200 rounded text-xs">
+                          <option value="Mint">Mint</option>
+                          <option value="Near Mint">Near Mint</option>
+                          <option value="Excellent">Excellent</option>
+                          <option value="Good">Good</option>
+                          <option value="Played">Played</option>
+                          <option value="Factory Sealed">Factory Sealed</option>
+                        </select>
+                      </td>
+                      <td className="px-2 py-1.5 hidden lg:table-cell">
+                        <select value={r.rarity} onChange={(e) => updateRow(r.index, 'rarity', e.target.value)}
+                          className="w-full px-1 py-1 border border-gray-200 rounded text-xs">
+                          {RARITIES.map((x) => <option key={x}>{x}</option>)}
+                        </select>
                       </td>
                       <td className="px-2 py-1.5 text-center">
                         {r.matchStatus === 'matched' && <span className="text-green-600 text-xs font-medium">✓</span>}
