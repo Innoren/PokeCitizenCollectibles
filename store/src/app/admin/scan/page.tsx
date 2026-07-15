@@ -7,16 +7,15 @@ type Layout = 'pairs' | 'fronts';
 interface Pair {
   front: File;
   back: File | null;
-  frontUrl?: string;
-  backUrl?: string;
 }
 
 interface ScanRow {
   index: number;
   frontPreview: string;
-  status: 'pending' | 'scanning' | 'done' | 'error';
+  status: 'pending' | 'reading' | 'matching' | 'done' | 'error';
   error?: string;
-  // Editable identified fields
+  ocrName: string;
+  ocrNumber: string;
   name: string;
   setName: string;
   number: string;
@@ -24,6 +23,7 @@ interface ScanRow {
   variant: string;
   condition: string;
   marketPrice: string | null;
+  matched: boolean;
   price: string;
   stock: string;
   include: boolean;
@@ -31,10 +31,40 @@ interface ScanRow {
 }
 
 const RARITIES = ['Common', 'Uncommon', 'Rare', 'Ultra Rare', 'Secret Rare', 'Sealed Product'];
-const CONDITIONS = ['Mint', 'Near Mint', 'Excellent', 'Good', 'Played', 'Factory Sealed'];
+
+/** Pull the collector number ("159/086" -> "159") and a name guess from OCR data. */
+function parseOcr(data: any): { name: string; number: string } {
+  const text: string = data?.text || '';
+
+  // Collector number: e.g. 159/086, 12/165, 045/091
+  let number = '';
+  const numMatch = text.match(/\b(\d{1,3})\s*\/\s*(\d{1,3})\b/);
+  if (numMatch) number = numMatch[1].replace(/^0+/, '') || '0';
+
+  // Name guess: the tallest text line in the top third of the card.
+  let name = '';
+  const lines: any[] = data?.lines || [];
+  if (lines.length > 0) {
+    const maxY = Math.max(...lines.map((l) => l.bbox?.y1 || 0)) || 1;
+    const candidates = lines
+      .filter((l) => (l.bbox?.y0 ?? 9999) < maxY * 0.4)
+      .map((l) => ({
+        text: (l.text || '').replace(/[^A-Za-z0-9'’.\- ]/g, '').trim(),
+        height: (l.bbox?.y1 || 0) - (l.bbox?.y0 || 0),
+        conf: l.confidence || 0,
+      }))
+      .filter((l) => l.text.replace(/[^A-Za-z]/g, '').length >= 3 && !/^HP\b/i.test(l.text));
+    candidates.sort((a, b) => b.height - a.height);
+    if (candidates[0]) {
+      // Strip a trailing "HP" and numbers/type noise
+      name = candidates[0].text.replace(/\s*\bHP\b.*$/i, '').replace(/\s{2,}/g, ' ').trim();
+    }
+  }
+  return { name, number };
+}
 
 export default function ScanPage() {
-  const [layout, setLayout] = useState<Layout>('pairs');
+  const [layout, setLayout] = useState<Layout>('fronts');
   const [pairs, setPairs] = useState<Pair[]>([]);
   const [rows, setRows] = useState<ScanRow[]>([]);
   const [phase, setPhase] = useState<'idle' | 'processing' | 'review'>('idle');
@@ -49,9 +79,7 @@ export default function ScanPage() {
     const arr = Array.from(files);
     const newPairs: Pair[] = [];
     if (layout === 'pairs') {
-      for (let i = 0; i < arr.length; i += 2) {
-        newPairs.push({ front: arr[i], back: arr[i + 1] || null });
-      }
+      for (let i = 0; i < arr.length; i += 2) newPairs.push({ front: arr[i], back: arr[i + 1] || null });
     } else {
       for (const f of arr) newPairs.push({ front: f, back: null });
     }
@@ -63,8 +91,7 @@ export default function ScanPage() {
     fd.append('file', file);
     const res = await fetch('/api/admin/upload', { method: 'POST', body: fd });
     if (!res.ok) throw new Error('Image upload failed');
-    const data = await res.json();
-    return data.imageUrl;
+    return (await res.json()).imageUrl;
   };
 
   const startScanning = async () => {
@@ -72,49 +99,58 @@ export default function ScanPage() {
     setPhase('processing');
     setProgress({ done: 0, total: pairs.length });
 
+    // Lazy-load Tesseract only when needed.
+    const Tesseract = (await import('tesseract.js')).default;
+
     const results: ScanRow[] = pairs.map((p, i) => ({
       index: i,
       frontPreview: URL.createObjectURL(p.front),
       status: 'pending',
-      name: '', setName: '', number: '', rarity: '', variant: 'Normal',
-      condition: 'Near Mint', marketPrice: null, price: '', stock: defaultStock,
-      include: true, imageUrl: '',
+      ocrName: '', ocrNumber: '',
+      name: '', setName: '', number: '', rarity: 'Rare', variant: 'Normal',
+      condition: 'Near Mint', marketPrice: null, matched: false,
+      price: '', stock: defaultStock, include: true, imageUrl: '',
     }));
     setRows([...results]);
 
     const markupVal = parseFloat(markup) || 10;
 
     for (let i = 0; i < pairs.length; i++) {
-      results[i].status = 'scanning';
-      setRows([...results]);
-
       try {
-        // Upload front (and back) to blob for permanent storage + public URL.
+        // 1) Store the front image (becomes the product image).
+        results[i].status = 'reading';
+        setRows([...results]);
         const frontUrl = await uploadToBlob(pairs[i].front);
-        const backUrl = pairs[i].back ? await uploadToBlob(pairs[i].back!) : undefined;
         results[i].imageUrl = frontUrl;
 
-        const res = await fetch('/api/admin/scan', {
+        // 2) OCR the front image in the browser (free, unlimited).
+        const { data } = await Tesseract.recognize(pairs[i].front, 'eng');
+        const parsed = parseOcr(data);
+        results[i].ocrName = parsed.name;
+        results[i].ocrNumber = parsed.number;
+
+        // 3) Match against the Pokémon TCG API + our pricing.
+        results[i].status = 'matching';
+        setRows([...results]);
+        const res = await fetch('/api/admin/identify', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ frontImageUrl: frontUrl, backImageUrl: backUrl }),
+          body: JSON.stringify({ nameGuess: parsed.name, number: parsed.number }),
         });
-        if (!res.ok) {
-          const d = await res.json().catch(() => ({}));
-          throw new Error(d.error || `Scan failed (${res.status})`);
-        }
-        const data = await res.json();
-        const c = data.card;
-        results[i].name = c.name || '';
+        if (!res.ok) throw new Error(`Match failed (${res.status})`);
+        const c = (await res.json()).card;
+
+        results[i].name = c.name || parsed.name || '';
         results[i].setName = c.setName || '';
-        results[i].number = c.number || '';
+        results[i].number = c.number || parsed.number || '';
         results[i].rarity = c.rarity || 'Rare';
         results[i].variant = c.variant || 'Normal';
-        results[i].condition = c.condition || 'Near Mint';
         results[i].marketPrice = c.marketPrice;
+        results[i].matched = !!c.matched;
         results[i].price = c.marketPrice
           ? (parseFloat(c.marketPrice) * (1 + markupVal / 100)).toFixed(2)
           : '';
+        results[i].include = !!c.name;
         results[i].status = 'done';
       } catch (err: any) {
         results[i].status = 'error';
@@ -124,7 +160,6 @@ export default function ScanPage() {
       setProgress({ done: i + 1, total: pairs.length });
       setRows([...results]);
     }
-
     setPhase('review');
   };
 
@@ -135,7 +170,7 @@ export default function ScanPage() {
   const commitAll = async () => {
     setCommitting(true);
     let count = 0;
-    const toAdd = rows.filter((r) => r.include && r.status === 'done' && r.name && r.price);
+    const toAdd = rows.filter((r) => r.include && r.name && r.price);
     for (const r of toAdd) {
       try {
         const res = await fetch('/api/admin/cards', {
@@ -161,52 +196,42 @@ export default function ScanPage() {
   };
 
   const reset = () => {
-    setPairs([]); setRows([]); setPhase('idle'); setCommitted(null);
-    setProgress({ done: 0, total: 0 });
+    setPairs([]); setRows([]); setPhase('idle'); setCommitted(null); setProgress({ done: 0, total: 0 });
   };
 
   const doneCount = rows.filter((r) => r.status === 'done').length;
-  const errorCount = rows.filter((r) => r.status === 'error').length;
-  const includeCount = rows.filter((r) => r.include && r.status === 'done').length;
+  const matchedCount = rows.filter((r) => r.matched).length;
+  const includeCount = rows.filter((r) => r.include).length;
+  const statusLabel = (s: ScanRow['status']) =>
+    s === 'reading' ? '👁 Reading…' : s === 'matching' ? '🔍 Matching…' : s === 'done' ? '✓' : s === 'error' ? '✗' : '';
 
   return (
     <div className="p-6 md:p-10 max-w-6xl mx-auto">
       <div className="mb-6 mt-8 md:mt-0">
         <h1 className="text-2xl md:text-3xl font-bold text-gray-900">📷 Batch Card Scanner</h1>
         <p className="text-gray-500 mt-1">
-          Upload photos of multiple cards — AI identifies each one, prices it with your market data, and adds them to inventory
+          100% free — reads each card in your browser, matches it to market data, and adds it to inventory. No scan limits.
         </p>
       </div>
 
-      {/* IDLE — upload */}
       {phase === 'idle' && (
         <div className="space-y-6">
-          {/* Layout choice */}
           <div className="bg-white rounded-2xl border border-gray-200 p-5">
             <p className="text-sm font-semibold text-gray-800 mb-3">How are your images arranged?</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <button
-                onClick={() => setLayout('pairs')}
-                className={`p-4 rounded-xl border-2 text-left transition-all ${
-                  layout === 'pairs' ? 'border-pokemon-red bg-red-50' : 'border-gray-200 hover:border-gray-300'
-                }`}
-              >
-                <p className="font-semibold text-gray-900">🔄 Front &amp; Back pairs</p>
-                <p className="text-xs text-gray-500 mt-1">Images alternate: front, back, front, back… (best accuracy)</p>
-              </button>
-              <button
-                onClick={() => setLayout('fronts')}
-                className={`p-4 rounded-xl border-2 text-left transition-all ${
-                  layout === 'fronts' ? 'border-pokemon-red bg-red-50' : 'border-gray-200 hover:border-gray-300'
-                }`}
-              >
+              <button onClick={() => setLayout('fronts')}
+                className={`p-4 rounded-xl border-2 text-left transition-all ${layout === 'fronts' ? 'border-pokemon-red bg-red-50' : 'border-gray-200 hover:border-gray-300'}`}>
                 <p className="font-semibold text-gray-900">🎴 Fronts only</p>
-                <p className="text-xs text-gray-500 mt-1">Each image is a different card front</p>
+                <p className="text-xs text-gray-500 mt-1">Each image is a different card front (recommended)</p>
+              </button>
+              <button onClick={() => setLayout('pairs')}
+                className={`p-4 rounded-xl border-2 text-left transition-all ${layout === 'pairs' ? 'border-pokemon-red bg-red-50' : 'border-gray-200 hover:border-gray-300'}`}>
+                <p className="font-semibold text-gray-900">🔄 Front &amp; Back pairs</p>
+                <p className="text-xs text-gray-500 mt-1">Images alternate front, back… (only the front is read)</p>
               </button>
             </div>
           </div>
 
-          {/* Defaults */}
           <div className="bg-white rounded-2xl border border-gray-200 p-5 flex flex-wrap gap-6">
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Markup %</label>
@@ -220,7 +245,6 @@ export default function ScanPage() {
             </div>
           </div>
 
-          {/* Upload */}
           <div className="bg-white rounded-2xl border-2 border-dashed border-gray-300 p-8 text-center">
             <div className="text-5xl mb-3">📸</div>
             <p className="text-gray-600 text-sm mb-5">
@@ -229,18 +253,15 @@ export default function ScanPage() {
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
               <label className="cursor-pointer px-6 py-3 bg-pokemon-red text-white font-semibold rounded-full hover:bg-red-600 transition-all">
                 📁 Choose Images
-                <input type="file" accept="image/*" multiple className="hidden"
-                  onChange={(e) => handleFiles(e.target.files)} />
+                <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => handleFiles(e.target.files)} />
               </label>
               <label className="cursor-pointer px-6 py-3 bg-white text-gray-800 font-semibold rounded-full border-2 border-gray-200 hover:border-pokemon-blue hover:text-pokemon-blue transition-all">
                 📷 Take Photos
-                <input type="file" accept="image/*" capture="environment" multiple className="hidden"
-                  onChange={(e) => handleFiles(e.target.files)} />
+                <input type="file" accept="image/*" capture="environment" multiple className="hidden" onChange={(e) => handleFiles(e.target.files)} />
               </label>
             </div>
           </div>
 
-          {/* Preview of pairs */}
           {pairs.length > 0 && (
             <div className="bg-white rounded-2xl border border-gray-200 p-5">
               <div className="flex items-center justify-between mb-4">
@@ -255,26 +276,20 @@ export default function ScanPage() {
                   <div key={i} className="relative">
                     <img src={URL.createObjectURL(p.front)} alt={`Card ${i + 1}`}
                       className="w-full aspect-[3/4] object-cover rounded-lg border border-gray-200" />
-                    <span className="absolute top-1 left-1 bg-black/60 text-white text-[10px] px-1.5 rounded">
-                      #{i + 1}{p.back ? ' 🔄' : ''}
-                    </span>
+                    <span className="absolute top-1 left-1 bg-black/60 text-white text-[10px] px-1.5 rounded">#{i + 1}</span>
                   </div>
                 ))}
               </div>
-              <p className="text-xs text-gray-400 mt-3">
-                CardGrader uses ~1 credit per card. {pairs.length} cards ≈ {pairs.length} credits.
-              </p>
             </div>
           )}
         </div>
       )}
 
-      {/* PROCESSING */}
       {phase === 'processing' && (
         <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
           <div className="flex items-center justify-between mb-2">
-            <span className="font-semibold text-gray-900">Scanning cards… {progress.done} / {progress.total}</span>
-            <span className="text-sm text-gray-500">✓ {doneCount} identified · ✗ {errorCount} failed</span>
+            <span className="font-semibold text-gray-900">Reading cards… {progress.done} / {progress.total}</span>
+            <span className="text-sm text-gray-500">✓ {matchedCount} matched</span>
           </div>
           <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden mb-4">
             <div className="h-full bg-gradient-to-r from-green-500 to-emerald-600 transition-all duration-300"
@@ -284,26 +299,27 @@ export default function ScanPage() {
             {rows.map((r) => (
               <div key={r.index} className="relative">
                 <img src={r.frontPreview} alt="" className={`w-full aspect-[3/4] object-cover rounded-lg border ${
-                  r.status === 'done' ? 'border-green-400' : r.status === 'error' ? 'border-red-400' : 'border-gray-200'
-                } ${r.status === 'scanning' ? 'animate-pulse' : ''}`} />
-                <span className="absolute bottom-1 right-1 text-xs">
-                  {r.status === 'done' ? '✓' : r.status === 'error' ? '✗' : r.status === 'scanning' ? '⏳' : ''}
+                  r.status === 'done' ? (r.matched ? 'border-green-400' : 'border-yellow-400') :
+                  r.status === 'error' ? 'border-red-400' : 'border-gray-200'
+                } ${r.status === 'reading' || r.status === 'matching' ? 'animate-pulse' : ''}`} />
+                <span className="absolute bottom-0 inset-x-0 bg-black/50 text-white text-[9px] text-center py-0.5">
+                  {statusLabel(r.status)}
                 </span>
               </div>
             ))}
           </div>
+          <p className="text-xs text-gray-400 mt-3">Reading text happens on your device — larger batches take a little longer.</p>
         </div>
       )}
 
-      {/* REVIEW */}
       {phase === 'review' && (
         <div className="space-y-4">
           {committed === null ? (
             <>
               <div className="bg-white rounded-2xl border border-gray-200 p-4 flex items-center justify-between flex-wrap gap-3">
                 <div>
-                  <p className="font-semibold text-gray-900">Review &amp; edit — {includeCount} selected of {doneCount} identified</p>
-                  <p className="text-xs text-gray-500">Uncheck any you don't want. Prices use your market data + {markup}% markup — edit anything before adding.</p>
+                  <p className="font-semibold text-gray-900">Review &amp; edit — {includeCount} selected · {matchedCount} auto-matched of {doneCount}</p>
+                  <p className="text-xs text-gray-500">Yellow = OCR read it but no confident match; check the name. Prices use your market data + {markup}% markup.</p>
                 </div>
                 <div className="flex gap-2">
                   <button onClick={reset} className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">Start over</button>
@@ -323,7 +339,7 @@ export default function ScanPage() {
                         <th className="px-3 py-2.5 text-left w-14">Img</th>
                         <th className="px-3 py-2.5 text-left">Name</th>
                         <th className="px-3 py-2.5 text-left hidden md:table-cell">Set</th>
-                        <th className="px-3 py-2.5 text-left hidden lg:table-cell">Rarity</th>
+                        <th className="px-3 py-2.5 text-left hidden lg:table-cell w-24">Rarity</th>
                         <th className="px-3 py-2.5 text-right">Market</th>
                         <th className="px-3 py-2.5 text-right">Your Price</th>
                         <th className="px-3 py-2.5 text-center w-16">Stock</th>
@@ -331,9 +347,9 @@ export default function ScanPage() {
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {rows.map((r) => (
-                        <tr key={r.index} className={r.status === 'error' ? 'bg-red-50/40' : r.include ? '' : 'opacity-40'}>
+                        <tr key={r.index} className={r.status === 'error' ? 'bg-red-50/40' : !r.include ? 'opacity-40' : !r.matched && r.status === 'done' ? 'bg-yellow-50/40' : ''}>
                           <td className="px-3 py-2 text-center">
-                            <input type="checkbox" checked={r.include} disabled={r.status !== 'done'}
+                            <input type="checkbox" checked={r.include} disabled={r.status === 'error'}
                               onChange={(e) => updateRow(r.index, 'include', e.target.checked)} />
                           </td>
                           <td className="px-3 py-2">
@@ -344,6 +360,7 @@ export default function ScanPage() {
                               <span className="text-red-600 text-xs">✗ {r.error}</span>
                             ) : (
                               <input value={r.name} onChange={(e) => updateRow(r.index, 'name', e.target.value)}
+                                placeholder={r.ocrName || 'Enter name'}
                                 className="w-full px-2 py-1 border border-gray-200 rounded text-sm" />
                             )}
                           </td>
@@ -357,9 +374,7 @@ export default function ScanPage() {
                               {RARITIES.map((x) => <option key={x} value={x}>{x}</option>)}
                             </select>
                           </td>
-                          <td className="px-3 py-2 text-right text-gray-500 text-xs">
-                            {r.marketPrice ? `$${r.marketPrice}` : '—'}
-                          </td>
+                          <td className="px-3 py-2 text-right text-gray-500 text-xs">{r.marketPrice ? `$${r.marketPrice}` : '—'}</td>
                           <td className="px-3 py-2 text-right">
                             <div className="flex items-center justify-end gap-0.5">
                               <span className="text-gray-400">$</span>
@@ -383,9 +398,7 @@ export default function ScanPage() {
               <div className="text-5xl mb-3">🎉</div>
               <h2 className="text-xl font-bold text-gray-900 mb-1">Added {committed} card{committed !== 1 ? 's' : ''} to inventory!</h2>
               <p className="text-gray-500 mb-6">They're now live in your store with market-based pricing.</p>
-              <button onClick={reset} className="px-6 py-2.5 bg-pokemon-red text-white font-semibold rounded-full hover:bg-red-600">
-                Scan more cards
-              </button>
+              <button onClick={reset} className="px-6 py-2.5 bg-pokemon-red text-white font-semibold rounded-full hover:bg-red-600">Scan more cards</button>
             </div>
           )}
         </div>
