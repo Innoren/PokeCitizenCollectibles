@@ -122,3 +122,41 @@ export async function resolveSealedPrice(card: {
   });
   return best ? (best as { name: string; price: number }).price : null;
 }
+
+/**
+ * Resolve an individual card's market price from TCGCSV (TCGplayer mirror).
+ * This handles brand-new sets that pokemontcg.io doesn't have pricing for yet.
+ * TCGCSV gets pricing data faster since it mirrors TCGplayer directly.
+ *
+ * Matches by card name within the correct set group.
+ */
+export async function resolveCardPriceViaTcgcsv(card: {
+  name: string;
+  setName?: string | null;
+}): Promise<number | null> {
+  if (!card.setName) return null;
+
+  const groupId = await findGroupId(card.setName);
+  if (groupId === null) return null;
+
+  const priceMap = await getGroupPriceMap(groupId);
+  if (priceMap.size === 0) return null;
+
+  // Clean the card name for matching (strip qualifiers, "ex" suffix variants, etc.).
+  const target = normalize(card.name);
+
+  // Exact match.
+  if (priceMap.has(target)) return priceMap.get(target)!;
+
+  // Fuzzy: find products whose name starts with our card name (handles
+  // TCGCSV naming like "Regice ex - 048/217" matching "regice ex").
+  let best: number | null = null;
+  Array.from(priceMap.entries()).forEach(([name, price]) => {
+    if (name.startsWith(target) || target.startsWith(name)) {
+      // Prefer the closest length match (avoid "Regice ex Secret Rare" when we want "Regice ex").
+      if (best === null) best = price;
+    }
+  });
+
+  return best;
+}

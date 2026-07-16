@@ -3,7 +3,7 @@ import { db } from '@/db';
 import { cards } from '@/db/schema';
 import { eq, sql } from 'drizzle-orm';
 import { resolveMarketPriceDetailed } from '@/lib/marketPrice';
-import { resolveSealedPrice } from '@/lib/sealedPrice';
+import { resolveSealedPrice, resolveCardPriceViaTcgcsv } from '@/lib/sealedPrice';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -47,6 +47,19 @@ async function priceOneCard(card: CardRow, globalMarkup: number | null, now: Dat
       ]);
       market = result.price;
       reason = result.reason;
+
+      // Fallback for new sets: TCGCSV mirrors TCGplayer directly and often has
+      // prices for brand-new sets that pokemontcg.io hasn't indexed yet.
+      if (market === null && (reason === 'no_price' || reason === 'not_found') && card.setName) {
+        const tcgcsvPrice = await Promise.race<number | null>([
+          resolveCardPriceViaTcgcsv(card),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 6000)),
+        ]);
+        if (tcgcsvPrice !== null) {
+          market = tcgcsvPrice;
+          reason = 'ok';
+        }
+      }
     }
 
     if (market === null) {
