@@ -75,9 +75,11 @@ export default function ScanPage() {
     let uploadsDone = 0;
     let identifyDone = 0;
 
-    // Process each card: upload → immediately identify. 8 cards in parallel.
-    const CONCURRENCY = 8;
+    // Process cards: upload + identify. 2 at a time to stay within Gemini rate limits.
+    const CONCURRENCY = 2;
     for (let i = 0; i < newRows.length; i += CONCURRENCY) {
+      // Small delay between batches to respect Gemini's 15 RPM rate limit.
+      if (i > 0) await new Promise((r) => setTimeout(r, 1500));
       const batch = newRows.slice(i, i + CONCURRENCY);
       await Promise.all(batch.map(async (row) => {
         // 1) Upload front image

@@ -8,27 +8,38 @@ export const maxDuration = 300;
 const GEMINI_MODEL = 'gemini-3.5-flash';
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
-/** Call Gemini and return the text response (or null on failure). */
+/** Call Gemini and return the text response (or null on failure). Retries on rate limit. */
 async function callGemini(apiKey: string, prompt: string, imagePart: any): Promise<string | null> {
-  try {
-    const res = await fetch(`${GEMINI_URL}?key=${apiKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }, imagePart] }],
-        generationConfig: {
-          responseMimeType: 'application/json',
-          temperature: 0,
-          maxOutputTokens: 4096,
-        },
-      }),
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data.candidates?.[0]?.content?.parts?.[0]?.text || null;
-  } catch {
-    return null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const res = await fetch(`${GEMINI_URL}?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }, imagePart] }],
+          generationConfig: {
+            responseMimeType: 'application/json',
+            temperature: 0,
+            maxOutputTokens: 4096,
+          },
+        }),
+      });
+      if (res.status === 429) {
+        // Rate limited — wait and retry.
+        await new Promise((r) => setTimeout(r, (attempt + 1) * 5000));
+        continue;
+      }
+      if (!res.ok) return null;
+      const data = await res.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (text) return text;
+      // Empty response — wait and retry
+      await new Promise((r) => setTimeout(r, 2000));
+    } catch {
+      await new Promise((r) => setTimeout(r, 2000));
+    }
   }
+  return null;
 }
 
 /**
