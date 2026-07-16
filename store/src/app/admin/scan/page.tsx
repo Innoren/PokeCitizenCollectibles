@@ -33,6 +33,7 @@ export default function ScanPage() {
   const [committing, setCommitting] = useState(false);
   const [committed, setCommitted] = useState(0);
   const [matching, setMatching] = useState(false);
+  const [filterMsg, setFilterMsg] = useState<string | null>(null);
 
   // Parallel upload (4 at a time for speed)
   const uploadAll = async (files: File[]) => {
@@ -76,11 +77,60 @@ export default function ScanPage() {
     setPhase('ready');
   };
 
-  const handleFiles = (files: FileList | null) => {
+  /**
+   * Detect if an image is likely a Pokémon card back.
+   * Card backs are predominantly dark red/maroon with a white center.
+   * We sample pixels and check the color distribution.
+   */
+  const isCardBack = (file: File): Promise<boolean> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const size = 50; // Sample at small size for speed.
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d')!;
+        ctx.drawImage(img, 0, 0, size, size);
+        const data = ctx.getImageData(0, 0, size, size).data;
+
+        let redPixels = 0;
+        const total = size * size;
+        for (let i = 0; i < data.length; i += 4) {
+          const r = data[i], g = data[i + 1], b = data[i + 2];
+          // Pokémon card backs are dark red/maroon (high R, low G/B).
+          if (r > 100 && r > g * 1.8 && r > b * 1.8 && g < 100 && b < 100) {
+            redPixels++;
+          }
+        }
+        // If 25%+ of pixels are that dark-red, it's likely a card back.
+        resolve(redPixels / total > 0.25);
+        URL.revokeObjectURL(img.src);
+      };
+      img.onerror = () => resolve(false);
+      img.src = URL.createObjectURL(file);
+    });
+  };
+
+  const handleFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     const arr = Array.from(files).filter((f) => f.type.startsWith('image/'));
     if (arr.length === 0) return;
-    uploadAll(arr);
+
+    // Filter out card backs automatically.
+    const fronts: File[] = [];
+    for (const f of arr) {
+      const back = await isCardBack(f);
+      if (!back) fronts.push(f);
+    }
+    const filtered = arr.length - fronts.length;
+    if (filtered > 0) setFilterMsg(`${filtered} card back${filtered !== 1 ? 's' : ''} detected and removed`);
+    else setFilterMsg(null);
+    if (fronts.length === 0) {
+      alert('All images appear to be card backs. Please include front images.');
+      return;
+    }
+    uploadAll(fronts);
   };
 
   const handleDrop = useCallback((e: React.DragEvent) => {
@@ -205,6 +255,9 @@ export default function ScanPage() {
       {/* UPLOADING */}
       {phase === 'uploading' && (
         <div className="bg-white rounded-2xl border border-gray-200 p-6">
+          {filterMsg && (
+            <div className="mb-3 p-2 bg-blue-50 text-blue-700 text-sm rounded-lg">{filterMsg}</div>
+          )}
           <div className="flex items-center justify-between mb-2">
             <span className="font-semibold text-gray-900">Uploading images… {uploadProgress.done} / {uploadProgress.total}</span>
           </div>
