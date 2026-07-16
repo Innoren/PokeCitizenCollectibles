@@ -2,16 +2,22 @@
 
 import { useState, useCallback } from 'react';
 
+interface Pair {
+  id: number;
+  frontPreview: string;
+  backPreview: string;
+  frontFile: File;
+  backFile: File;
+}
+
 interface CardRow {
   index: number;
-  file: File;
-  backFile: File | null;
-  preview: string;
-  backPreview: string | null;
+  frontPreview: string;
+  backPreview: string;
   uploadStatus: 'pending' | 'uploading' | 'done' | 'error';
   imageUrl: string;
-  backImageUrl: string | null;
-  // Editable
+  frontFile: File;
+  backFile: File;
   name: string;
   setName: string;
   number: string;
@@ -20,7 +26,6 @@ interface CardRow {
   price: string;
   stock: string;
   include: boolean;
-  // Match state
   matchStatus: 'idle' | 'matching' | 'matched' | 'not_found';
   marketPrice: string | null;
 }
@@ -28,26 +33,81 @@ interface CardRow {
 const RARITIES = ['Common', 'Uncommon', 'Rare', 'Ultra Rare', 'Secret Rare', 'Sealed Product'];
 
 export default function ScanPage() {
+  const [phase, setPhase] = useState<'idle' | 'pairing' | 'uploading' | 'ready' | 'committed'>('idle');
+  const [pairs, setPairs] = useState<Pair[]>([]);
   const [rows, setRows] = useState<CardRow[]>([]);
-  const [phase, setPhase] = useState<'idle' | 'uploading' | 'ready' | 'committed'>('idle');
   const [uploadProgress, setUploadProgress] = useState({ done: 0, total: 0 });
   const [markup, setMarkup] = useState('10');
   const [defaultStock, setDefaultStock] = useState('1');
   const [committing, setCommitting] = useState(false);
   const [committed, setCommitted] = useState(0);
   const [matching, setMatching] = useState(false);
-  const [filterMsg, setFilterMsg] = useState<string | null>(null);
 
-  // Parallel upload (4 at a time for speed)
-  const uploadAll = async (paired: { front: File; back: File | null }[]) => {
+  // ═══ PHASE 1: Upload files → auto-pair (every 2 images = front, back) ═══
+  const handleFiles = (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const arr = Array.from(files).filter((f) => f.type.startsWith('image/'));
+    if (arr.length < 2) { alert('Upload at least 2 images (front + back per card).'); return; }
+
+    // Simple: every two consecutive images form a pair (front, back, front, back…).
+    const newPairs: Pair[] = [];
+    for (let i = 0; i < arr.length - 1; i += 2) {
+      newPairs.push({
+        id: i / 2,
+        frontFile: arr[i],
+        backFile: arr[i + 1],
+        frontPreview: URL.createObjectURL(arr[i]),
+        backPreview: URL.createObjectURL(arr[i + 1]),
+      });
+    }
+    // If odd number, last image is a front with no back — skip or add solo.
+    if (arr.length % 2 !== 0) {
+      newPairs.push({
+        id: newPairs.length,
+        frontFile: arr[arr.length - 1],
+        backFile: arr[arr.length - 1],
+        frontPreview: URL.createObjectURL(arr[arr.length - 1]),
+        backPreview: '',
+      });
+    }
+    setPairs(newPairs);
+    setPhase('pairing');
+  };
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    handleFiles(e.dataTransfer.files);
+  }, []);
+
+  const flipPair = (id: number) => {
+    setPairs((prev) => prev.map((p) => p.id === id ? {
+      ...p,
+      frontFile: p.backFile, backFile: p.frontFile,
+      frontPreview: p.backPreview, backPreview: p.frontPreview,
+    } : p));
+  };
+
+  const flipAll = () => {
+    setPairs((prev) => prev.map((p) => ({
+      ...p,
+      frontFile: p.backFile, backFile: p.frontFile,
+      frontPreview: p.backPreview, backPreview: p.frontPreview,
+    })));
+  };
+
+  const removePair = (id: number) => {
+    setPairs((prev) => prev.filter((p) => p.id !== id));
+  };
+
+  // ═══ PHASE 2: Upload fronts (+ backs for reference) ═══
+  const startUpload = async () => {
+    if (pairs.length === 0) return;
     setPhase('uploading');
-    const total = paired.length;
-    setUploadProgress({ done: 0, total });
+    setUploadProgress({ done: 0, total: pairs.length });
 
-    const newRows: CardRow[] = paired.map(({ front, back }, i) => ({
-      index: i, file: front, backFile: back,
-      preview: URL.createObjectURL(front), backPreview: back ? URL.createObjectURL(back) : null,
-      uploadStatus: 'pending', imageUrl: '', backImageUrl: null,
+    const newRows: CardRow[] = pairs.map((p, i) => ({
+      index: i, frontPreview: p.frontPreview, backPreview: p.backPreview,
+      uploadStatus: 'pending', imageUrl: '', frontFile: p.frontFile, backFile: p.backFile,
       name: '', setName: '', number: '', rarity: 'Rare', condition: 'Near Mint',
       price: '', stock: defaultStock, include: true,
       matchStatus: 'idle', marketPrice: null,
@@ -62,114 +122,29 @@ export default function ScanPage() {
         row.uploadStatus = 'uploading';
         setRows([...newRows]);
         try {
-          // Upload front.
           const fd = new FormData();
-          fd.append('file', row.file);
+          fd.append('file', row.frontFile);
           const res = await fetch('/api/admin/upload', { method: 'POST', body: fd });
-          if (!res.ok) throw new Error('Upload failed');
+          if (!res.ok) throw new Error();
           row.imageUrl = (await res.json()).imageUrl;
-
-          // Upload back (if present).
-          if (row.backFile) {
-            const bfd = new FormData();
-            bfd.append('file', row.backFile);
-            const bres = await fetch('/api/admin/upload', { method: 'POST', body: bfd });
-            if (bres.ok) row.backImageUrl = (await bres.json()).imageUrl;
-          }
           row.uploadStatus = 'done';
         } catch {
           row.uploadStatus = 'error';
           row.include = false;
         }
         done++;
-        setUploadProgress({ done, total });
+        setUploadProgress({ done, total: pairs.length });
         setRows([...newRows]);
       }));
     }
     setPhase('ready');
   };
 
-  /**
-   * Detect if an image is likely a Pokémon card back.
-   * Card backs are predominantly dark red/maroon with a white center.
-   */
-  const isCardBack = (file: File): Promise<boolean> => {
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const size = 50;
-        canvas.width = size;
-        canvas.height = size;
-        const ctx = canvas.getContext('2d')!;
-        ctx.drawImage(img, 0, 0, size, size);
-        const data = ctx.getImageData(0, 0, size, size).data;
-
-        let redPixels = 0;
-        const total = size * size;
-        for (let i = 0; i < data.length; i += 4) {
-          const r = data[i], g = data[i + 1], b = data[i + 2];
-          if (r > 100 && r > g * 1.8 && r > b * 1.8 && g < 100 && b < 100) {
-            redPixels++;
-          }
-        }
-        resolve(redPixels / total > 0.25);
-        URL.revokeObjectURL(img.src);
-      };
-      img.onerror = () => resolve(false);
-      img.src = URL.createObjectURL(file);
-    });
-  };
-
-  const handleFiles = async (files: FileList | null) => {
-    if (!files || files.length === 0) return;
-    const arr = Array.from(files).filter((f) => f.type.startsWith('image/'));
-    if (arr.length === 0) return;
-
-    // Separate fronts and backs. Pair them in order (front, back, front, back…).
-    const classifications: { file: File; isBack: boolean }[] = [];
-    for (const f of arr) {
-      const back = await isCardBack(f);
-      classifications.push({ file: f, isBack: back });
-    }
-
-    // Pair: each front gets the next back (if available).
-    const paired: { front: File; back: File | null }[] = [];
-    let pendingFront: File | null = null;
-    for (const c of classifications) {
-      if (!c.isBack) {
-        // New front — store any previous front without a back.
-        if (pendingFront) paired.push({ front: pendingFront, back: null });
-        pendingFront = c.file;
-      } else {
-        // Back — pair with pending front.
-        if (pendingFront) {
-          paired.push({ front: pendingFront, back: c.file });
-          pendingFront = null;
-        }
-        // If no pending front, this back is orphaned — skip it.
-      }
-    }
-    if (pendingFront) paired.push({ front: pendingFront, back: null });
-
-    if (paired.length === 0) {
-      alert('No card fronts detected. Make sure your images include front-facing photos.');
-      return;
-    }
-    setFilterMsg(`${paired.length} card${paired.length !== 1 ? 's' : ''} detected (${classifications.filter((c) => c.isBack).length} backs paired)`);
-    uploadAll(paired);
-  };
-
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    handleFiles(e.dataTransfer.files);
-  }, []);
-
+  // ═══ PHASE 3: Match & edit ═══
   const updateRow = (index: number, field: keyof CardRow, value: any) => {
     setRows((prev) => prev.map((r) => (r.index === index ? { ...r, [field]: value } : r)));
   };
 
-  // Match a single card by name/number against the TCG API.
   const matchCard = async (index: number) => {
     const row = rows.find((r) => r.index === index);
     if (!row || (!row.name && !row.number)) return;
@@ -181,32 +156,23 @@ export default function ScanPage() {
         body: JSON.stringify({ nameGuess: row.name, number: row.number }),
       });
       if (!res.ok) throw new Error();
-      const data = await res.json();
-      const c = data.card;
+      const c = (await res.json()).card;
       const markupVal = parseFloat(markup) || 10;
       setRows((prev) => prev.map((r) => r.index === index ? {
-        ...r,
-        name: c.name || r.name,
-        setName: c.setName || r.setName,
-        number: c.number || r.number,
-        rarity: c.rarity || r.rarity,
+        ...r, name: c.name || r.name, setName: c.setName || r.setName,
+        number: c.number || r.number, rarity: c.rarity || r.rarity,
         marketPrice: c.marketPrice,
         price: c.marketPrice ? (parseFloat(c.marketPrice) * (1 + markupVal / 100)).toFixed(2) : r.price,
         matchStatus: c.matched ? 'matched' : 'not_found',
       } : r));
-    } catch {
-      updateRow(index, 'matchStatus', 'not_found');
-    }
+    } catch { updateRow(index, 'matchStatus', 'not_found'); }
   };
 
-  // Match ALL cards that have a name or number filled in.
   const matchAll = async () => {
     setMatching(true);
     const toMatch = rows.filter((r) => r.include && (r.name || r.number) && r.matchStatus !== 'matched');
-    const CONCURRENCY = 3;
-    for (let i = 0; i < toMatch.length; i += CONCURRENCY) {
-      const batch = toMatch.slice(i, i + CONCURRENCY);
-      await Promise.all(batch.map((r) => matchCard(r.index)));
+    for (let i = 0; i < toMatch.length; i += 3) {
+      await Promise.all(toMatch.slice(i, i + 3).map((r) => matchCard(r.index)));
     }
     setMatching(false);
   };
@@ -214,8 +180,7 @@ export default function ScanPage() {
   const commitAll = async () => {
     setCommitting(true);
     let count = 0;
-    const toAdd = rows.filter((r) => r.include && r.name && r.price && r.imageUrl);
-    for (const r of toAdd) {
+    for (const r of rows.filter((r) => r.include && r.name && r.price && r.imageUrl)) {
       try {
         const res = await fetch('/api/admin/cards', {
           method: 'POST',
@@ -227,26 +192,24 @@ export default function ScanPage() {
           }),
         });
         if (res.ok) count++;
-      } catch { /* skip */ }
+      } catch {}
     }
     setCommitted(count);
     setPhase('committed');
     setCommitting(false);
   };
 
-  const reset = () => { setRows([]); setPhase('idle'); setCommitted(0); };
+  const reset = () => { setPairs([]); setRows([]); setPhase('idle'); setCommitted(0); };
   const includeCount = rows.filter((r) => r.include && r.name && r.price).length;
 
   return (
     <div className="p-6 md:p-10 max-w-6xl mx-auto">
       <div className="mb-6 mt-8 md:mt-0">
         <h1 className="text-2xl md:text-3xl font-bold text-gray-900">📷 Bulk Card Upload</h1>
-        <p className="text-gray-500 mt-1">
-          Drop your JPEG card photos — they upload in parallel, then type name or collector # to auto-match and price. No scan limits, no AI costs.
-        </p>
+        <p className="text-gray-500 mt-1">Upload front/back JPEGs — they auto-pair. Flip any that are swapped, then identify &amp; price.</p>
       </div>
 
-      {/* IDLE — drop zone */}
+      {/* ════ IDLE ════ */}
       {phase === 'idle' && (
         <div className="space-y-6">
           <div className="bg-white rounded-2xl border border-gray-200 p-5 flex flex-wrap gap-6">
@@ -262,14 +225,11 @@ export default function ScanPage() {
             </div>
           </div>
 
-          <div
-            onDrop={handleDrop}
-            onDragOver={(e) => e.preventDefault()}
-            className="bg-white rounded-2xl border-2 border-dashed border-gray-300 p-12 text-center hover:border-pokemon-red/50 transition-colors"
-          >
+          <div onDrop={handleDrop} onDragOver={(e) => e.preventDefault()}
+            className="bg-white rounded-2xl border-2 border-dashed border-gray-300 p-12 text-center hover:border-pokemon-red/50 transition-colors">
             <div className="text-5xl mb-3">📁</div>
             <p className="text-lg font-semibold text-gray-700 mb-2">Drop card JPEGs here</p>
-            <p className="text-gray-500 text-sm mb-5">or click to browse — upload as many as you want at once</p>
+            <p className="text-gray-500 text-sm mb-5">Upload in <strong>front, back, front, back…</strong> order</p>
             <label className="cursor-pointer inline-block px-8 py-3 bg-pokemon-red text-white font-semibold rounded-full hover:bg-red-600 transition-all">
               Choose Files
               <input type="file" accept="image/jpeg,image/jpg,image/png,image/webp" multiple className="hidden"
@@ -279,14 +239,57 @@ export default function ScanPage() {
         </div>
       )}
 
-      {/* UPLOADING */}
+      {/* ════ PAIRING ════ */}
+      {phase === 'pairing' && (
+        <div className="space-y-4">
+          <div className="bg-white rounded-2xl border border-gray-200 p-4 flex items-center justify-between">
+            <div>
+              <p className="font-semibold text-gray-900">Front/Back pairs</p>
+              <p className="text-xs text-gray-500">Selected {pairs.length * 2} images</p>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={flipAll} className="px-4 py-2 text-sm font-medium border border-gray-300 rounded-lg hover:bg-gray-50">🔄 Flip All</button>
+              <button onClick={startUpload} className="px-6 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-semibold rounded-lg hover:from-green-600 hover:to-emerald-700 text-sm">
+                ✓ Continue ({pairs.length} cards)
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {pairs.map((p) => (
+              <div key={p.id} className="bg-white rounded-xl border border-gray-200 p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-sm font-semibold text-gray-700">Pair #{p.id + 1}</span>
+                  <div className="flex gap-2">
+                    <button onClick={() => flipPair(p.id)} className="px-3 py-1 text-xs font-medium border border-gray-300 rounded-md hover:bg-gray-50">🔄 Flip</button>
+                    <button onClick={() => removePair(p.id)} className="px-3 py-1 text-xs font-medium text-red-600 border border-red-200 rounded-md hover:bg-red-50">🗑 Remove</button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="text-center">
+                    <p className="text-[10px] font-semibold text-gray-500 uppercase mb-1">Front</p>
+                    <img src={p.frontPreview} alt="Front" className="w-full aspect-[3/4] object-cover rounded-lg border border-gray-200" />
+                  </div>
+                  <div className="text-center">
+                    <p className="text-[10px] font-semibold text-gray-500 uppercase mb-1">Back</p>
+                    {p.backPreview ? (
+                      <img src={p.backPreview} alt="Back" className="w-full aspect-[3/4] object-cover rounded-lg border border-gray-200" />
+                    ) : (
+                      <div className="w-full aspect-[3/4] bg-gray-100 rounded-lg flex items-center justify-center text-gray-400 text-xs">No back</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ════ UPLOADING ════ */}
       {phase === 'uploading' && (
         <div className="bg-white rounded-2xl border border-gray-200 p-6">
-          {filterMsg && (
-            <div className="mb-3 p-2 bg-blue-50 text-blue-700 text-sm rounded-lg">{filterMsg}</div>
-          )}
           <div className="flex items-center justify-between mb-2">
-            <span className="font-semibold text-gray-900">Uploading images… {uploadProgress.done} / {uploadProgress.total}</span>
+            <span className="font-semibold text-gray-900">Uploading… {uploadProgress.done} / {uploadProgress.total}</span>
           </div>
           <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden">
             <div className="h-full bg-gradient-to-r from-blue-500 to-cyan-500 transition-all duration-200"
@@ -295,26 +298,24 @@ export default function ScanPage() {
         </div>
       )}
 
-      {/* READY — editable table */}
+      {/* ════ READY — listing ════ */}
       {phase === 'ready' && (
         <div className="space-y-4">
           <div className="bg-white rounded-2xl border border-gray-200 p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div>
-              <p className="font-semibold text-gray-900">{rows.length} images uploaded — enter name or # to identify</p>
-              <p className="text-xs text-gray-500">Type the card name or collector # (e.g. "159"), press Enter or click "Match All". Market price + markup applied automatically.</p>
+              <p className="font-semibold text-gray-900">{rows.length} cards ready — type name or # to identify</p>
+              <p className="text-xs text-gray-500">Press Enter in any row to match. Or fill several and hit "Match All".</p>
             </div>
             <div className="flex gap-2 shrink-0">
               <button onClick={matchAll} disabled={matching}
-                className="px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-all">
+                className="px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50">
                 {matching ? '⏳ Matching…' : '🔍 Match All'}
               </button>
               <button onClick={commitAll} disabled={committing || includeCount === 0}
-                className="px-5 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white text-sm font-semibold rounded-lg hover:from-green-600 hover:to-emerald-700 disabled:opacity-50 transition-all">
-                {committing ? '⏳ Adding…' : `✓ Add ${includeCount} to Inventory`}
+                className="px-5 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white text-sm font-semibold rounded-lg hover:from-green-600 hover:to-emerald-700 disabled:opacity-50">
+                {committing ? '⏳…' : `✓ Add ${includeCount} to Inventory`}
               </button>
-              <button onClick={reset} className="px-3 py-2 text-gray-500 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">
-                Reset
-              </button>
+              <button onClick={reset} className="px-3 py-2 text-gray-500 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">Reset</button>
             </div>
           </div>
 
@@ -334,7 +335,7 @@ export default function ScanPage() {
                     <th className="px-2 py-2.5 text-center w-14">Qty</th>
                     <th className="px-2 py-2.5 text-left w-28">Condition</th>
                     <th className="px-2 py-2.5 text-left hidden lg:table-cell w-24">Rarity</th>
-                    <th className="px-2 py-2.5 text-center w-16">Status</th>
+                    <th className="px-2 py-2.5 text-center w-12">✓</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -344,19 +345,15 @@ export default function ScanPage() {
                         <input type="checkbox" checked={r.include} onChange={(e) => updateRow(r.index, 'include', e.target.checked)} />
                       </td>
                       <td className="px-2 py-1.5">
-                        <img src={r.preview} alt="" className="w-12 h-16 object-cover rounded border border-gray-200" />
+                        <img src={r.frontPreview} alt="" className="w-12 h-16 object-cover rounded border border-gray-200" />
                       </td>
                       <td className="px-2 py-1.5">
-                        {r.backPreview ? (
-                          <img src={r.backPreview} alt="" className="w-12 h-16 object-cover rounded border border-gray-200" />
-                        ) : (
-                          <span className="text-gray-300 text-xs">—</span>
-                        )}
+                        <img src={r.backPreview} alt="" className="w-12 h-16 object-cover rounded border border-gray-200" />
                       </td>
                       <td className="px-2 py-1.5">
                         <input value={r.name} onChange={(e) => updateRow(r.index, 'name', e.target.value)}
                           onKeyDown={(e) => { if (e.key === 'Enter') matchCard(r.index); }}
-                          placeholder="Type name, press Enter"
+                          placeholder="Type name, Enter"
                           className="w-full px-2 py-1 border border-gray-200 rounded text-sm focus:border-pokemon-red outline-none" />
                       </td>
                       <td className="px-2 py-1.5">
@@ -369,9 +366,7 @@ export default function ScanPage() {
                         <input value={r.setName} onChange={(e) => updateRow(r.index, 'setName', e.target.value)}
                           className="w-full px-2 py-1 border border-gray-200 rounded text-sm" placeholder="Auto" />
                       </td>
-                      <td className="px-2 py-1.5 text-right text-xs text-gray-500">
-                        {r.marketPrice ? `$${r.marketPrice}` : '—'}
-                      </td>
+                      <td className="px-2 py-1.5 text-right text-xs text-gray-500">{r.marketPrice ? `$${r.marketPrice}` : '—'}</td>
                       <td className="px-2 py-1.5 text-right">
                         <div className="flex items-center justify-end gap-0.5">
                           <span className="text-gray-400 text-xs">$</span>
@@ -412,22 +407,16 @@ export default function ScanPage() {
               </table>
             </div>
           </div>
-
-          <p className="text-xs text-gray-400 text-center">
-            💡 Type a name or collector # in any row and press Enter to instantly match &amp; price. Or fill several and hit "Match All".
-          </p>
         </div>
       )}
 
-      {/* COMMITTED */}
+      {/* ════ COMMITTED ════ */}
       {phase === 'committed' && (
         <div className="bg-white rounded-2xl border border-gray-200 p-10 text-center">
           <div className="text-5xl mb-3">🎉</div>
           <h2 className="text-xl font-bold text-gray-900 mb-1">Added {committed} card{committed !== 1 ? 's' : ''} to inventory!</h2>
-          <p className="text-gray-500 mb-6">They're live in your store with market-based pricing.</p>
-          <button onClick={reset} className="px-6 py-2.5 bg-pokemon-red text-white font-semibold rounded-full hover:bg-red-600">
-            Upload more cards
-          </button>
+          <p className="text-gray-500 mb-6">They're live in your store.</p>
+          <button onClick={reset} className="px-6 py-2.5 bg-pokemon-red text-white font-semibold rounded-full hover:bg-red-600">Upload more</button>
         </div>
       )}
     </div>
