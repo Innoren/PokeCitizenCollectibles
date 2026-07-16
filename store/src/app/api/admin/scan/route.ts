@@ -37,13 +37,7 @@ export async function POST(request: NextRequest) {
       ? { inlineData: { mimeType: 'image/jpeg', data: imageBase64 } }
       : { fileData: { mimeType: 'image/jpeg', fileUri: imageUrl } };
 
-    const prompt = `Look at this Pokemon trading card image. Read the text on the card and return a JSON object with these fields:
-- name: the Pokemon or card name at the top
-- number: the collector number (the number before the slash, like "25" from "25/198")
-- set: the set name if visible
-- rarity: Common, Uncommon, Rare, Ultra Rare, or Secret Rare
-
-Return ONLY valid JSON, nothing else. Example: {"name":"Pikachu","number":"25","set":"Base Set","rarity":"Common"}`;
+    const prompt = `Read this Pokemon card. Return JSON: {"name":"card name","number":"collector number before slash","set":"set name","rarity":"rarity"}`;
 
     const geminiRes = await fetch(`${GEMINI_URL}?key=${apiKey}`, {
       method: 'POST',
@@ -56,8 +50,9 @@ Return ONLY valid JSON, nothing else. Example: {"name":"Pikachu","number":"25","
           ],
         }],
         generationConfig: {
-          temperature: 0.1,
-          maxOutputTokens: 256,
+          responseMimeType: 'application/json',
+          temperature: 0,
+          maxOutputTokens: 2048,
         },
       }),
     });
@@ -78,9 +73,13 @@ Return ONLY valid JSON, nothing else. Example: {"name":"Pikachu","number":"25","
     // Parse the JSON from Gemini's response.
     let parsed: { name: string; number: string; set: string; rarity: string };
     try {
-      // Gemini sometimes wraps in ```json ... ```
+      // With responseMimeType=application/json, output should be clean JSON.
       const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
       parsed = JSON.parse(cleaned);
+      // Normalize "N/A" to empty string.
+      if (parsed.number === 'N/A' || parsed.number === 'n/a') parsed.number = '';
+      if (parsed.set === 'N/A' || parsed.set === 'n/a') parsed.set = '';
+      if (parsed.rarity === 'N/A' || parsed.rarity === 'n/a') parsed.rarity = '';
     } catch {
       return NextResponse.json({
         error: 'Failed to parse Gemini response',
