@@ -119,19 +119,29 @@ export async function resolveMarketPriceDetailed(card: CardLike): Promise<PriceR
     const numResults = await searchCards(`name:"${cleanName}" number:${num}`);
     if (numResults && numResults.length > 0) {
       anyResultsFound = true;
-      // Try to find one that matches our set name first.
+      // First: prefer a result whose set matches ours AND whose number is exact.
       if (card.setName) {
         const setNorm = card.setName.toLowerCase().replace(/[^a-z0-9]/g, '');
-        const setMatch = numResults.find((r) => {
+        const exactMatch = numResults.find((r) => {
           const apiSet = (r.set?.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-          return apiSet.includes(setNorm) || setNorm.includes(apiSet);
+          const apiNum = String(r.number || '').replace(/^0+/, '');
+          return apiNum === num && (apiSet.includes(setNorm) || setNorm.includes(apiSet));
         });
-        if (setMatch) {
-          const price = extractMarketPrice(setMatch);
+        if (exactMatch) {
+          const price = extractMarketPrice(exactMatch);
           if (price !== null) return { price, reason: 'ok' };
         }
       }
-      // Otherwise take the first with a price (same name+number is still specific).
+      // Then: any result whose number matches exactly (regardless of set).
+      const numMatch = numResults.find((r) => {
+        const apiNum = String(r.number || '').replace(/^0+/, '');
+        return apiNum === num && extractMarketPrice(r) !== null;
+      });
+      if (numMatch) {
+        const price = extractMarketPrice(numMatch);
+        if (price !== null) return { price, reason: 'ok' };
+      }
+      // Last resort: first with any price (name+number was already a tight query).
       for (const r of numResults) {
         const price = extractMarketPrice(r);
         if (price !== null) return { price, reason: 'ok' };

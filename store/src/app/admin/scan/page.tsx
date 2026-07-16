@@ -89,61 +89,49 @@ export default function ScanPage() {
         } catch { row.uploadStatus = 'error'; row.include = false; uploadsDone++; identifyDone++; setUploadProgress({ done: uploadsDone, total: pairs.length }); setIdentifyProgress({ done: identifyDone, total: pairs.length }); setRows([...newRows]); return; }
         uploadsDone++; setUploadProgress({ done: uploadsDone, total: pairs.length }); setRows([...newRows]);
 
-        // 2) Immediately identify with Gemini DIRECTLY from browser (skip server round-trip)
+        // 2) Immediately identify via server (which has Gemini key reliably)
         row.matchStatus = 'scanning'; setRows([...newRows]);
         try {
           const base64 = await resizeImage(row.frontFile);
-          const geminiRes = await fetch(
-            'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=' + encodeURIComponent(process.env.NEXT_PUBLIC_GEMINI_API_KEY || ''),
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                contents: [{ parts: [
-                  { text: 'Read this Pokemon card. Return ONLY JSON: {"name":"card name","number":"collector number before slash","set":"set name","rarity":"rarity"}' },
-                  { inlineData: { mimeType: 'image/jpeg', data: base64 } },
-                ] }],
-                generationConfig: { temperature: 0, maxOutputTokens: 100 },
-              }),
-            }
-          );
-          if (!geminiRes.ok) throw new Error();
-          const gd = await geminiRes.json();
-          const text = gd.candidates?.[0]?.content?.parts?.[0]?.text || '';
-          const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-          const card = JSON.parse(cleaned);
-          row.name = card.name || ''; row.setName = card.set || ''; row.number = card.number || '';
-          row.rarity = card.rarity || 'Rare';
+          const res = await fetch('/api/admin/scan', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ imageBase64: base64 }),
+          });
+          if (!res.ok) throw new Error();
+          const { card } = await res.json();
+          row.name = card.name || ''; row.setName = card.setName || ''; row.number = card.number || '';
+          row.rarity = card.rarity || 'Rare'; row.marketPrice = card.marketPrice;
+          row.price = card.marketPrice ? (parseFloat(card.marketPrice) * (1 + markupVal / 100)).toFixed(2) : '';
           row.matchStatus = card.name ? 'matched' : 'not_found';
         } catch { row.matchStatus = 'not_found'; }
         identifyDone++; setIdentifyProgress({ done: identifyDone, total: pairs.length }); setRows([...newRows]);
       }));
     }
     setIdentifying(false);
-
-    // Batch price all identified cards (fast - server-side with our existing pricing system)
-    const markupVal2 = parseFloat(markup) || 10;
-    const identified = newRows.filter((r) => r.matchStatus === 'matched' && r.name);
-    // Price 6 at a time in parallel
-    for (let i = 0; i < identified.length; i += 6) {
-      await Promise.all(identified.slice(i, i + 6).map(async (row) => {
-        try {
-          const res = await fetch('/api/admin/identify', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ nameGuess: row.name, number: row.number }),
-          });
-          if (!res.ok) return;
-          const { card } = await res.json();
-          if (card.marketPrice) {
-            row.marketPrice = card.marketPrice;
-            row.price = (parseFloat(card.marketPrice) * (1 + markupVal2 / 100)).toFixed(2);
-          }
-          setRows([...newRows]);
-        } catch {}
-      }));
-    }
-
     setPhase('ready');
+  };
+
+  // Match a single card by name+number (for manual entry)
+  const matchCard = async (index: number) => {
+    const row = rows.find((r) => r.index === index);
+    if (!row || (!row.name && !row.number)) return;
+    updateRow(index, 'matchStatus', 'scanning');
+    try {
+      const res = await fetch('/api/admin/identify', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nameGuess: row.name, number: row.number }),
+      });
+      if (!res.ok) throw new Error();
+      const { card } = await res.json();
+      const markupVal = parseFloat(markup) || 10;
+      setRows((prev) => prev.map((r) => r.index === index ? {
+        ...r, name: card.name || r.name, setName: card.setName || r.setName,
+        number: card.number || r.number, rarity: card.rarity || r.rarity,
+        marketPrice: card.marketPrice,
+        price: card.marketPrice ? (parseFloat(card.marketPrice) * (1 + markupVal / 100)).toFixed(2) : r.price,
+        matchStatus: card.matched ? 'matched' : 'not_found',
+      } : r));
+    } catch { updateRow(index, 'matchStatus', 'not_found'); }
   };
 
   // ═══ COMMIT ═══
@@ -276,8 +264,8 @@ export default function ScanPage() {
                       <td className="px-2 py-1.5 text-center"><input type="checkbox" checked={r.include} onChange={(e) => updateRow(r.index, 'include', e.target.checked)} /></td>
                       <td className="px-2 py-1.5"><img src={r.frontPreview} alt="" className="w-12 h-16 object-cover rounded border border-gray-200" /></td>
                       <td className="px-2 py-1.5"><img src={r.backPreview} alt="" className="w-12 h-16 object-cover rounded border border-gray-200" /></td>
-                      <td className="px-2 py-1.5"><input value={r.name} onChange={(e) => updateRow(r.index, 'name', e.target.value)} placeholder="Auto-fills on identify" className="w-full px-2 py-1 border border-gray-200 rounded text-sm" /></td>
-                      <td className="px-2 py-1.5"><input value={r.number} onChange={(e) => updateRow(r.index, 'number', e.target.value)} className="w-full px-2 py-1 border border-gray-200 rounded text-sm text-center" placeholder="#" /></td>
+                      <td className="px-2 py-1.5"><input value={r.name} onChange={(e) => updateRow(r.index, 'name', e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') matchCard(r.index); }} placeholder="Type name, Enter" className="w-full px-2 py-1 border border-gray-200 rounded text-sm" /></td>
+                      <td className="px-2 py-1.5"><input value={r.number} onChange={(e) => updateRow(r.index, 'number', e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') matchCard(r.index); }} className="w-full px-2 py-1 border border-gray-200 rounded text-sm text-center" placeholder="#" /></td>
                       <td className="px-2 py-1.5 hidden md:table-cell"><input value={r.setName} onChange={(e) => updateRow(r.index, 'setName', e.target.value)} className="w-full px-2 py-1 border border-gray-200 rounded text-sm" placeholder="Auto" /></td>
                       <td className="px-2 py-1.5 text-right text-xs text-gray-500">{r.marketPrice ? `$${r.marketPrice}` : '—'}</td>
                       <td className="px-2 py-1.5 text-right"><div className="flex items-center justify-end gap-0.5"><span className="text-gray-400 text-xs">$</span><input value={r.price} onChange={(e) => updateRow(r.index, 'price', e.target.value)} className="w-16 px-1.5 py-1 border border-gray-200 rounded text-right text-sm" /></div></td>
