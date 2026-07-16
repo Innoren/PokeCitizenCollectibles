@@ -5,9 +5,12 @@ import { useState, useCallback } from 'react';
 interface CardRow {
   index: number;
   file: File;
+  backFile: File | null;
   preview: string;
+  backPreview: string | null;
   uploadStatus: 'pending' | 'uploading' | 'done' | 'error';
   imageUrl: string;
+  backImageUrl: string | null;
   // Editable
   name: string;
   setName: string;
@@ -36,14 +39,15 @@ export default function ScanPage() {
   const [filterMsg, setFilterMsg] = useState<string | null>(null);
 
   // Parallel upload (4 at a time for speed)
-  const uploadAll = async (files: File[]) => {
+  const uploadAll = async (paired: { front: File; back: File | null }[]) => {
     setPhase('uploading');
-    const total = files.length;
+    const total = paired.length;
     setUploadProgress({ done: 0, total });
 
-    const newRows: CardRow[] = files.map((file, i) => ({
-      index: i, file, preview: URL.createObjectURL(file),
-      uploadStatus: 'pending', imageUrl: '',
+    const newRows: CardRow[] = paired.map(({ front, back }, i) => ({
+      index: i, file: front, backFile: back,
+      preview: URL.createObjectURL(front), backPreview: back ? URL.createObjectURL(back) : null,
+      uploadStatus: 'pending', imageUrl: '', backImageUrl: null,
       name: '', setName: '', number: '', rarity: 'Rare', condition: 'Near Mint',
       price: '', stock: defaultStock, include: true,
       matchStatus: 'idle', marketPrice: null,
@@ -58,12 +62,20 @@ export default function ScanPage() {
         row.uploadStatus = 'uploading';
         setRows([...newRows]);
         try {
+          // Upload front.
           const fd = new FormData();
           fd.append('file', row.file);
           const res = await fetch('/api/admin/upload', { method: 'POST', body: fd });
           if (!res.ok) throw new Error('Upload failed');
-          const data = await res.json();
-          row.imageUrl = data.imageUrl;
+          row.imageUrl = (await res.json()).imageUrl;
+
+          // Upload back (if present).
+          if (row.backFile) {
+            const bfd = new FormData();
+            bfd.append('file', row.backFile);
+            const bres = await fetch('/api/admin/upload', { method: 'POST', body: bfd });
+            if (bres.ok) row.backImageUrl = (await bres.json()).imageUrl;
+          }
           row.uploadStatus = 'done';
         } catch {
           row.uploadStatus = 'error';
@@ -80,14 +92,13 @@ export default function ScanPage() {
   /**
    * Detect if an image is likely a Pokémon card back.
    * Card backs are predominantly dark red/maroon with a white center.
-   * We sample pixels and check the color distribution.
    */
   const isCardBack = (file: File): Promise<boolean> => {
     return new Promise((resolve) => {
       const img = new Image();
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        const size = 50; // Sample at small size for speed.
+        const size = 50;
         canvas.width = size;
         canvas.height = size;
         const ctx = canvas.getContext('2d')!;
@@ -98,12 +109,10 @@ export default function ScanPage() {
         const total = size * size;
         for (let i = 0; i < data.length; i += 4) {
           const r = data[i], g = data[i + 1], b = data[i + 2];
-          // Pokémon card backs are dark red/maroon (high R, low G/B).
           if (r > 100 && r > g * 1.8 && r > b * 1.8 && g < 100 && b < 100) {
             redPixels++;
           }
         }
-        // If 25%+ of pixels are that dark-red, it's likely a card back.
         resolve(redPixels / total > 0.25);
         URL.revokeObjectURL(img.src);
       };
@@ -117,20 +126,38 @@ export default function ScanPage() {
     const arr = Array.from(files).filter((f) => f.type.startsWith('image/'));
     if (arr.length === 0) return;
 
-    // Filter out card backs automatically.
-    const fronts: File[] = [];
+    // Separate fronts and backs. Pair them in order (front, back, front, back…).
+    const classifications: { file: File; isBack: boolean }[] = [];
     for (const f of arr) {
       const back = await isCardBack(f);
-      if (!back) fronts.push(f);
+      classifications.push({ file: f, isBack: back });
     }
-    const filtered = arr.length - fronts.length;
-    if (filtered > 0) setFilterMsg(`${filtered} card back${filtered !== 1 ? 's' : ''} detected and removed`);
-    else setFilterMsg(null);
-    if (fronts.length === 0) {
-      alert('All images appear to be card backs. Please include front images.');
+
+    // Pair: each front gets the next back (if available).
+    const paired: { front: File; back: File | null }[] = [];
+    let pendingFront: File | null = null;
+    for (const c of classifications) {
+      if (!c.isBack) {
+        // New front — store any previous front without a back.
+        if (pendingFront) paired.push({ front: pendingFront, back: null });
+        pendingFront = c.file;
+      } else {
+        // Back — pair with pending front.
+        if (pendingFront) {
+          paired.push({ front: pendingFront, back: c.file });
+          pendingFront = null;
+        }
+        // If no pending front, this back is orphaned — skip it.
+      }
+    }
+    if (pendingFront) paired.push({ front: pendingFront, back: null });
+
+    if (paired.length === 0) {
+      alert('No card fronts detected. Make sure your images include front-facing photos.');
       return;
     }
-    uploadAll(fronts);
+    setFilterMsg(`${paired.length} card${paired.length !== 1 ? 's' : ''} detected (${classifications.filter((c) => c.isBack).length} backs paired)`);
+    uploadAll(paired);
   };
 
   const handleDrop = useCallback((e: React.DragEvent) => {
@@ -298,6 +325,7 @@ export default function ScanPage() {
                   <tr>
                     <th className="px-2 py-2.5 text-center w-8">✓</th>
                     <th className="px-2 py-2.5 text-left w-16">Front</th>
+                    <th className="px-2 py-2.5 text-left w-16">Back</th>
                     <th className="px-2 py-2.5 text-left">Card Name</th>
                     <th className="px-2 py-2.5 text-left w-20">#</th>
                     <th className="px-2 py-2.5 text-left hidden md:table-cell">Set</th>
@@ -317,6 +345,13 @@ export default function ScanPage() {
                       </td>
                       <td className="px-2 py-1.5">
                         <img src={r.preview} alt="" className="w-12 h-16 object-cover rounded border border-gray-200" />
+                      </td>
+                      <td className="px-2 py-1.5">
+                        {r.backPreview ? (
+                          <img src={r.backPreview} alt="" className="w-12 h-16 object-cover rounded border border-gray-200" />
+                        ) : (
+                          <span className="text-gray-300 text-xs">—</span>
+                        )}
                       </td>
                       <td className="px-2 py-1.5">
                         <input value={r.name} onChange={(e) => updateRow(r.index, 'name', e.target.value)}
