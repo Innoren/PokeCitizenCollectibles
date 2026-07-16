@@ -97,12 +97,18 @@ export default function ScanPage() {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ imageBase64: base64 }),
           });
-          if (!res.ok) throw new Error();
-          const { card } = await res.json();
-          row.name = card.name || ''; row.setName = card.setName || ''; row.number = card.number || '';
-          row.rarity = card.rarity || 'Rare'; row.marketPrice = card.marketPrice;
-          row.price = card.marketPrice ? (parseFloat(card.marketPrice) * (1 + markupVal / 100)).toFixed(2) : '';
-          row.matchStatus = card.name ? 'matched' : 'not_found';
+          const responseData = await res.json();
+          if (responseData.error && !responseData.card?.name) {
+            // Show error in name field for debugging
+            row.name = `[Error: ${responseData.error.slice(0, 50)}]`;
+            row.matchStatus = 'not_found';
+          } else {
+            const card = responseData.card || {};
+            row.name = card.name || ''; row.setName = card.setName || ''; row.number = card.number || '';
+            row.rarity = card.rarity || 'Rare'; row.marketPrice = card.marketPrice;
+            row.price = card.marketPrice ? (parseFloat(card.marketPrice) * (1 + markupVal / 100)).toFixed(2) : '';
+            row.matchStatus = card.name ? 'matched' : 'not_found';
+          }
         } catch { row.matchStatus = 'not_found'; }
         identifyDone++; setIdentifyProgress({ done: identifyDone, total: pairs.length }); setRows([...newRows]);
       }));
