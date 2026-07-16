@@ -51,8 +51,9 @@ async function priceOneCard(card: CardRow, globalMarkup: number | null, now: Dat
       // Fallback for new sets: TCGCSV mirrors TCGplayer directly and often has
       // prices for brand-new sets that pokemontcg.io hasn't indexed yet.
       if (market === null && (reason === 'no_price' || reason === 'not_found') && card.setName) {
+        const num = card.sku ? card.sku.replace(/\/.*$/, '').replace(/^0+/, '') : undefined;
         const tcgcsvPrice = await Promise.race<number | null>([
-          resolveCardPriceViaTcgcsv(card),
+          resolveCardPriceViaTcgcsv({ name: card.name, setName: card.setName, number: num }),
           new Promise<null>((resolve) => setTimeout(() => resolve(null), 6000)),
         ]);
         if (tcgcsvPrice !== null) {

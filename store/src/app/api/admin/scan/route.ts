@@ -8,6 +8,29 @@ export const maxDuration = 300;
 const GEMINI_MODEL = 'gemini-3.5-flash';
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
+/** Call Gemini and return the text response (or null on failure). */
+async function callGemini(apiKey: string, prompt: string, imagePart: any): Promise<string | null> {
+  try {
+    const res = await fetch(`${GEMINI_URL}?key=${apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }, imagePart] }],
+        generationConfig: {
+          responseMimeType: 'application/json',
+          temperature: 0,
+          maxOutputTokens: 4096,
+        },
+      }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.candidates?.[0]?.content?.parts?.[0]?.text || null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * POST /api/admin/scan
  *
@@ -39,36 +62,23 @@ export async function POST(request: NextRequest) {
 
     const prompt = `Read this Pokemon card. Return JSON: {"name":"card name","number":"collector number before slash","set":"set name","rarity":"rarity"}`;
 
-    const geminiRes = await fetch(`${GEMINI_URL}?key=${apiKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{
-          parts: [
-            { text: prompt },
-            imagePart,
-          ],
-        }],
-        generationConfig: {
-          responseMimeType: 'application/json',
-          temperature: 0,
-          maxOutputTokens: 2048,
-        },
-      }),
-    });
+    // First attempt
+    let geminiText = await callGemini(apiKey, prompt, imagePart);
 
-    if (!geminiRes.ok) {
-      const err = await geminiRes.json().catch(() => ({}));
-      const errMsg = err.error?.message || `Gemini returned ${geminiRes.status}`;
-      console.error('Gemini error:', errMsg);
+    // Retry once if first attempt failed
+    if (!geminiText) {
+      await new Promise((r) => setTimeout(r, 1000));
+      geminiText = await callGemini(apiKey, prompt, imagePart);
+    }
+
+    if (!geminiText) {
       return NextResponse.json({
-        error: errMsg,
+        error: 'Gemini returned empty response',
         card: { name: '', number: '', setName: '', rarity: '', marketPrice: null, condition: 'Near Mint' },
       });
     }
 
-    const geminiData = await geminiRes.json();
-    const text = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const text = geminiText;
 
     // Parse the JSON from Gemini's response.
     let parsed: { name: string; number: string; set: string; rarity: string };
@@ -99,7 +109,7 @@ export async function POST(request: NextRequest) {
 
     // TCGCSV fallback for new sets.
     if (marketPrice === null && parsed.set) {
-      marketPrice = await resolveCardPriceViaTcgcsv({ name: parsed.name, setName: parsed.set });
+      marketPrice = await resolveCardPriceViaTcgcsv({ name: parsed.name, setName: parsed.set, number: parsed.number || undefined });
     }
 
     return NextResponse.json({

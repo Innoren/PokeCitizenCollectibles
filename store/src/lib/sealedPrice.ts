@@ -128,11 +128,12 @@ export async function resolveSealedPrice(card: {
  * This handles brand-new sets that pokemontcg.io doesn't have pricing for yet.
  * TCGCSV gets pricing data faster since it mirrors TCGplayer directly.
  *
- * Matches by card name within the correct set group.
+ * Uses the collector number for exact matching when available (prevents SIR/regular confusion).
  */
 export async function resolveCardPriceViaTcgcsv(card: {
   name: string;
   setName?: string | null;
+  number?: string | null;
 }): Promise<number | null> {
   if (!card.setName) return null;
 
@@ -142,21 +143,36 @@ export async function resolveCardPriceViaTcgcsv(card: {
   const priceMap = await getGroupPriceMap(groupId);
   if (priceMap.size === 0) return null;
 
-  // Clean the card name for matching (strip qualifiers, "ex" suffix variants, etc.).
   const target = normalize(card.name);
+  const num = card.number?.replace(/^0+/, '') || '';
 
-  // Exact match.
+  // If we have a collector number, find the exact product that includes it.
+  // TCGCSV names often look like "Regice ex - 048/217" or "Regice ex (048)"
+  if (num) {
+    let exactMatch: number | null = null;
+    Array.from(priceMap.entries()).forEach(([name, price]) => {
+      // Check if product name contains both the card name and the number
+      if (name.includes(target) && name.includes(num)) {
+        exactMatch = price;
+      }
+    });
+    if (exactMatch !== null) return exactMatch;
+  }
+
+  // Exact name match (no number needed for sealed products)
   if (priceMap.has(target)) return priceMap.get(target)!;
 
-  // Fuzzy: find products whose name starts with our card name (handles
-  // TCGCSV naming like "Regice ex - 048/217" matching "regice ex").
-  let best: number | null = null;
-  Array.from(priceMap.entries()).forEach(([name, price]) => {
-    if (name.startsWith(target) || target.startsWith(name)) {
-      // Prefer the closest length match (avoid "Regice ex Secret Rare" when we want "Regice ex").
-      if (best === null) best = price;
-    }
-  });
+  // Fuzzy: find products whose name starts with our card name.
+  // But ONLY if no collector number was provided (to avoid SIR/regular confusion).
+  if (!num) {
+    let best: number | null = null;
+    Array.from(priceMap.entries()).forEach(([name, price]) => {
+      if (name.startsWith(target) || target.startsWith(name)) {
+        if (best === null) best = price;
+      }
+    });
+    return best;
+  }
 
-  return best;
+  return null;
 }
