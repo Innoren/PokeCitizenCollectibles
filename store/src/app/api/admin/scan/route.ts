@@ -1,118 +1,117 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { resolveMarketPriceDetailed } from '@/lib/marketPrice';
-import { resolveSealedPrice } from '@/lib/sealedPrice';
+import { resolveCardPriceViaTcgcsv } from '@/lib/sealedPrice';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
-const CARDGRADER_API = 'https://cardgrader.ai/v1';
+const GEMINI_MODEL = 'gemini-3.5-flash';
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
 /**
  * POST /api/admin/scan
  *
- * Identifies a card from front + back photos via CardGrader.AI, then prices it
- * using our own market-pricing system (Pokemon TCG API + TCGCSV).
+ * Accepts a card front image (base64 or public URL), sends it to Gemini 3.5 Flash
+ * to read the card name, collector number, set, and rarity in one shot.
+ * Then prices it using the existing market pricing system.
  *
- * Body (JSON): { frontImageUrl, backImageUrl }  — both required by CardGrader.
- * Returns: { card: { name, setName, number, rarity, variant, condition, marketPrice } }
+ * Body: { imageBase64: string (base64 JPEG/PNG data) } or { imageUrl: string }
+ * Returns: { name, number, setName, rarity, variant, marketPrice, condition }
  */
 export async function POST(request: NextRequest) {
-  const apiKey = process.env.CARDGRADER_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    return NextResponse.json({ error: 'CARDGRADER_API_KEY not configured' }, { status: 500 });
+    return NextResponse.json({ error: 'GEMINI_API_KEY not configured' }, { status: 500 });
   }
 
   try {
     const body = await request.json();
-    const { frontImageUrl, backImageUrl } = body;
-    if (!frontImageUrl) {
-      return NextResponse.json({ error: 'frontImageUrl is required' }, { status: 400 });
+    const { imageBase64, imageUrl } = body;
+
+    if (!imageBase64 && !imageUrl) {
+      return NextResponse.json({ error: 'Provide imageBase64 or imageUrl' }, { status: 400 });
     }
 
-    // Start the scan (identify only — we price with our own system).
-    const scanRes = await fetch(`${CARDGRADER_API}/scans`, {
+    // Build the Gemini request with the image.
+    const imagePart: any = imageBase64
+      ? { inlineData: { mimeType: 'image/jpeg', data: imageBase64 } }
+      : { fileData: { mimeType: 'image/jpeg', fileUri: imageUrl } };
+
+    const prompt = `You are a Pokémon trading card identifier. Look at this card image and extract:
+1. The card name (the name at the top of the card, e.g. "Charizard ex", "Pikachu VMAX")
+2. The collector number (bottom left or bottom right, format like "25/198" or "159/086" — just give me the first number before the slash)
+3. The set name (from the set symbol or text on the card if visible)
+4. The rarity (Common, Uncommon, Rare, Ultra Rare, Secret Rare, or Illustration Rare)
+
+Respond ONLY in this exact JSON format, nothing else:
+{"name":"card name","number":"collector number","set":"set name or empty string","rarity":"rarity"}
+
+If you cannot read a field, use an empty string. Do not explain or add any text outside the JSON.`;
+
+    const geminiRes = await fetch(`${GEMINI_URL}?key=${apiKey}`, {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        frontImageUrl,
-        // CardGrader requires a back image; fall back to the front if only one
-        // was provided (identification relies mainly on the front anyway).
-        backImageUrl: backImageUrl || frontImageUrl,
-        modules: ['identify'],
+        contents: [{
+          parts: [
+            { text: prompt },
+            imagePart,
+          ],
+        }],
+        generationConfig: {
+          temperature: 0.1,
+          maxOutputTokens: 200,
+        },
       }),
     });
 
-    if (!scanRes.ok) {
-      const err = await scanRes.json().catch(() => ({}));
-      return NextResponse.json(
-        { error: err.detail || err.title || `CardGrader error (${scanRes.status})` },
-        { status: scanRes.status }
-      );
+    if (!geminiRes.ok) {
+      const err = await geminiRes.json().catch(() => ({}));
+      return NextResponse.json({
+        error: err.error?.message || `Gemini error (${geminiRes.status})`,
+      }, { status: geminiRes.status });
     }
 
-    const scanData = await scanRes.json();
-    const scanId = scanData.id;
-    if (!scanId) {
-      return NextResponse.json({ error: 'Failed to start scan' }, { status: 500 });
-    }
+    const geminiData = await geminiRes.json();
+    const text = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || '';
 
-    // Poll for completion (CardGrader is queue-backed, ~30-120s).
-    const maxWait = 180000;
-    const pollInterval = 3000;
-    const startedAt = Date.now();
-    let result: any = null;
-
-    while (Date.now() - startedAt < maxWait) {
-      await new Promise((r) => setTimeout(r, pollInterval));
-      const pollRes = await fetch(`${CARDGRADER_API}/scans/${scanId}`, {
-        headers: { Authorization: `Bearer ${apiKey}` },
+    // Parse the JSON from Gemini's response.
+    let parsed: { name: string; number: string; set: string; rarity: string };
+    try {
+      // Gemini sometimes wraps in ```json ... ```
+      const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      parsed = JSON.parse(cleaned);
+    } catch {
+      return NextResponse.json({
+        error: 'Failed to parse Gemini response',
+        raw: text,
+        card: { name: '', number: '', setName: '', rarity: '', marketPrice: null, condition: 'Near Mint' },
       });
-      if (!pollRes.ok) continue;
-      const pollData = await pollRes.json();
-      if (pollData.status === 'completed') { result = pollData; break; }
-      if (pollData.status === 'failed') {
-        return NextResponse.json({ error: 'Card identification failed' }, { status: 502 });
-      }
     }
 
-    if (!result) {
-      return NextResponse.json({ error: 'Scan timed out — try again' }, { status: 504 });
-    }
-
-    const id = result.identification || {};
-    const name: string = id.name || 'Unknown Card';
-    const setName: string = id.set || '';
-    const number: string = id.number || '';
-    const parallel: string = id.parallel && id.parallel.toLowerCase() !== 'base' ? id.parallel : 'Normal';
-
-    // Price it with OUR existing system (same logic the auto-pricer uses).
-    const priceRes = await resolveMarketPriceDetailed({
-      sku: number || null,
-      name,
-      setName,
+    // Price it using our existing system.
+    const priceResult = await resolveMarketPriceDetailed({
+      sku: parsed.number || null,
+      name: parsed.name,
+      setName: parsed.set || undefined,
     });
-    let marketPrice: number | null = priceRes.price;
-    let priceReason = priceRes.reason;
 
-    // If nothing found and it looks like sealed product, try TCGCSV.
-    if (marketPrice === null && /elite trainer|booster box|booster bundle|collection box|tin|blister/i.test(name)) {
-      marketPrice = await resolveSealedPrice({ name, setName });
-      if (marketPrice !== null) priceReason = 'ok';
+    let marketPrice = priceResult.price;
+
+    // TCGCSV fallback for new sets.
+    if (marketPrice === null && parsed.set) {
+      marketPrice = await resolveCardPriceViaTcgcsv({ name: parsed.name, setName: parsed.set });
     }
 
     return NextResponse.json({
       card: {
-        name,
-        setName,
-        number,
-        rarity: '', // CardGrader doesn't return rarity; admin can set it
-        variant: parallel,
+        name: parsed.name || '',
+        number: parsed.number || '',
+        setName: parsed.set || '',
+        rarity: parsed.rarity || 'Rare',
+        variant: 'Normal',
         condition: 'Near Mint',
         marketPrice: marketPrice !== null ? marketPrice.toFixed(2) : null,
-        priceReason,
       },
     });
   } catch (error: any) {
