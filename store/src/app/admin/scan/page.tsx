@@ -168,8 +168,70 @@ export default function ScanPage() {
     } catch { updateRow(index, 'matchStatus', 'not_found'); }
   };
 
+  // Quick OCR of just the bottom strip of the card to get the collector number.
+  // Much faster than full-card OCR since it's a tiny image region.
+  const extractNumber = async (file: File): Promise<string> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        // Crop the bottom 18% of the image (where collector # lives).
+        const cropY = Math.floor(img.height * 0.82);
+        const cropH = img.height - cropY;
+        canvas.width = img.width;
+        canvas.height = cropH;
+        const ctx = canvas.getContext('2d')!;
+        ctx.drawImage(img, 0, cropY, img.width, cropH, 0, 0, img.width, cropH);
+
+        // Convert to text-friendly: high contrast grayscale.
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const d = imageData.data;
+        for (let i = 0; i < d.length; i += 4) {
+          const gray = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+          const bw = gray < 140 ? 0 : 255;
+          d[i] = d[i + 1] = d[i + 2] = bw;
+        }
+        ctx.putImageData(imageData, 0, 0);
+
+        // Use canvas OCR-lite: look for "NNN/NNN" pattern via Tesseract on this tiny strip.
+        canvas.toBlob(async (blob) => {
+          if (!blob) { resolve(''); return; }
+          try {
+            const Tesseract = (await import('tesseract.js')).default;
+            const { data } = await Tesseract.recognize(blob, 'eng', {
+              tessedit_char_whitelist: '0123456789/',
+            } as any);
+            const text = data.text || '';
+            const match = text.match(/(\d{1,3})\s*\/\s*(\d{1,3})/);
+            resolve(match ? match[1].replace(/^0+/, '') || '0' : '');
+          } catch {
+            resolve('');
+          }
+        }, 'image/png');
+        URL.revokeObjectURL(img.src);
+      };
+      img.onerror = () => resolve('');
+      img.src = URL.createObjectURL(file);
+    });
+  };
+
   const matchAll = async () => {
     setMatching(true);
+    const toProcess = rows.filter((r) => r.include && r.matchStatus !== 'matched');
+
+    // First: extract numbers from all fronts via quick OCR (parallel, 4 at a time).
+    for (let i = 0; i < toProcess.length; i += 4) {
+      const batch = toProcess.slice(i, i + 4);
+      await Promise.all(batch.map(async (row) => {
+        if (!row.number && !row.name) {
+          updateRow(row.index, 'matchStatus', 'matching');
+          const num = await extractNumber(row.frontFile);
+          if (num) updateRow(row.index, 'number', num);
+        }
+      }));
+    }
+
+    // Then: match all that now have a name or number against the pricing API.
     const toMatch = rows.filter((r) => r.include && (r.name || r.number) && r.matchStatus !== 'matched');
     for (let i = 0; i < toMatch.length; i += 3) {
       await Promise.all(toMatch.slice(i, i + 3).map((r) => matchCard(r.index)));
