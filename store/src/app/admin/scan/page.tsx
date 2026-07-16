@@ -27,6 +27,21 @@ export default function ScanPage() {
   const [identifyProgress, setIdentifyProgress] = useState({ done: 0, total: 0 });
 
   // ═══ FILE HANDLING ═══
+  // Resize image client-side for speed (800px wide is plenty for Gemini to read text)
+  const resizeImage = (file: File): Promise<string> => new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const MAX = 800;
+      let w = img.width, h = img.height;
+      if (w > MAX) { h = Math.round(h * MAX / w); w = MAX; }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d')!.drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL('image/jpeg', 0.85).split(',')[1]);
+      URL.revokeObjectURL(img.src);
+    };
+    img.src = URL.createObjectURL(file);
+  });
   const handleFiles = (files: FileList | null) => {
     if (!files || files.length === 0) return;
     const arr = Array.from(files).filter((f) => f.type.startsWith('image/'));
@@ -43,10 +58,12 @@ export default function ScanPage() {
   const flipAll = () => setPairs((p) => p.map((x) => ({ ...x, frontFile: x.backFile, backFile: x.frontFile, frontPreview: x.backPreview, backPreview: x.frontPreview })));
   const removePair = (id: number) => setPairs((p) => p.filter((x) => x.id !== id));
 
-  // ═══ UPLOAD ═══
+  // ═══ UPLOAD + IDENTIFY (streaming pipeline) ═══
   const startUpload = async () => {
     if (pairs.length === 0) return;
     setPhase('uploading'); setUploadProgress({ done: 0, total: pairs.length });
+    setIdentifying(true); setIdentifyProgress({ done: 0, total: pairs.length });
+    const markupVal = parseFloat(markup) || 10;
     const newRows: CardRow[] = pairs.map((p, i) => ({
       index: i, frontPreview: p.frontPreview, backPreview: p.backPreview,
       uploadStatus: 'pending', imageUrl: '', frontFile: p.frontFile, backFile: p.backFile,
@@ -54,62 +71,43 @@ export default function ScanPage() {
       price: '', stock: defaultStock, include: true, matchStatus: 'idle', marketPrice: null,
     }));
     setRows(newRows);
-    let done = 0;
-    for (let i = 0; i < newRows.length; i += 4) {
-      await Promise.all(newRows.slice(i, i + 4).map(async (row) => {
+
+    let uploadsDone = 0;
+    let identifyDone = 0;
+
+    // Process each card: upload → immediately identify. 8 cards in parallel.
+    const CONCURRENCY = 8;
+    for (let i = 0; i < newRows.length; i += CONCURRENCY) {
+      const batch = newRows.slice(i, i + CONCURRENCY);
+      await Promise.all(batch.map(async (row) => {
+        // 1) Upload front image
         row.uploadStatus = 'uploading'; setRows([...newRows]);
         try {
           const fd = new FormData(); fd.append('file', row.frontFile);
           const res = await fetch('/api/admin/upload', { method: 'POST', body: fd });
           if (!res.ok) throw new Error(); row.imageUrl = (await res.json()).imageUrl; row.uploadStatus = 'done';
-        } catch { row.uploadStatus = 'error'; row.include = false; }
-        done++; setUploadProgress({ done, total: pairs.length }); setRows([...newRows]);
-      }));
-    }
-    setPhase('ready');
-  };
+        } catch { row.uploadStatus = 'error'; row.include = false; uploadsDone++; identifyDone++; setUploadProgress({ done: uploadsDone, total: pairs.length }); setIdentifyProgress({ done: identifyDone, total: pairs.length }); setRows([...newRows]); return; }
+        uploadsDone++; setUploadProgress({ done: uploadsDone, total: pairs.length }); setRows([...newRows]);
 
-  // ═══ IDENTIFY ALL (Gemini AI) ═══
-  const fileToBase64 = (file: File): Promise<string> => new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve((reader.result as string).split(',')[1]);
-    reader.readAsDataURL(file);
-  });
-
-  const identifyAll = async () => {
-    setIdentifying(true);
-    const toScan = rows.filter((r) => r.include && r.matchStatus !== 'matched');
-    setIdentifyProgress({ done: 0, total: toScan.length });
-    const markupVal = parseFloat(markup) || 10;
-    let done = 0;
-
-    // Process 4 cards in parallel for speed.
-    for (let i = 0; i < toScan.length; i += 4) {
-      const batch = toScan.slice(i, i + 4);
-      await Promise.all(batch.map(async (row) => {
-        setRows((prev) => prev.map((r) => r.index === row.index ? { ...r, matchStatus: 'scanning' } : r));
+        // 2) Immediately identify with Gemini (don't wait for other uploads)
+        row.matchStatus = 'scanning'; setRows([...newRows]);
         try {
-          const base64 = await fileToBase64(row.frontFile);
+          const base64 = await resizeImage(row.frontFile);
           const res = await fetch('/api/admin/scan', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ imageBase64: base64 }),
           });
-          if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Scan failed');
+          if (!res.ok) throw new Error();
           const { card } = await res.json();
-          setRows((prev) => prev.map((r) => r.index === row.index ? {
-            ...r, name: card.name || '', setName: card.setName || '', number: card.number || '',
-            rarity: card.rarity || 'Rare', marketPrice: card.marketPrice,
-            price: card.marketPrice ? (parseFloat(card.marketPrice) * (1 + markupVal / 100)).toFixed(2) : '',
-            matchStatus: card.name ? 'matched' : 'not_found',
-          } : r));
-        } catch {
-          setRows((prev) => prev.map((r) => r.index === row.index ? { ...r, matchStatus: 'not_found' } : r));
-        }
-        done++; setIdentifyProgress({ done, total: toScan.length });
+          row.name = card.name || ''; row.setName = card.setName || ''; row.number = card.number || '';
+          row.rarity = card.rarity || 'Rare'; row.marketPrice = card.marketPrice;
+          row.price = card.marketPrice ? (parseFloat(card.marketPrice) * (1 + markupVal / 100)).toFixed(2) : '';
+          row.matchStatus = card.name ? 'matched' : 'not_found';
+        } catch { row.matchStatus = 'not_found'; }
+        identifyDone++; setIdentifyProgress({ done: identifyDone, total: pairs.length }); setRows([...newRows]);
       }));
     }
-    setIdentifying(false);
+    setIdentifying(false); setPhase('ready');
   };
 
   // ═══ COMMIT ═══
@@ -182,13 +180,23 @@ export default function ScanPage() {
         </div>
       )}
 
-      {/* UPLOADING */}
+      {/* UPLOADING + IDENTIFYING (combined) */}
       {phase === 'uploading' && (
-        <div className="bg-white rounded-2xl border border-gray-200 p-6">
-          <span className="font-semibold text-gray-900">Uploading… {uploadProgress.done}/{uploadProgress.total}</span>
-          <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden mt-2">
-            <div className="h-full bg-gradient-to-r from-blue-500 to-cyan-500 transition-all" style={{ width: `${uploadProgress.total ? (uploadProgress.done / uploadProgress.total) * 100 : 0}%` }} />
+        <div className="bg-white rounded-2xl border border-gray-200 p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <span className="font-semibold text-gray-900">Processing {pairs.length} cards…</span>
+            <span className="text-sm text-green-600 font-medium">{identifyProgress.done} identified</span>
           </div>
+          <div>
+            <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
+              <span>Upload: {uploadProgress.done}/{uploadProgress.total}</span>
+              <span>Identify: {identifyProgress.done}/{identifyProgress.total}</span>
+            </div>
+            <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden">
+              <div className="h-full bg-gradient-to-r from-pokemon-red to-orange-500 transition-all" style={{ width: `${identifyProgress.total ? (identifyProgress.done / identifyProgress.total) * 100 : 0}%` }} />
+            </div>
+          </div>
+          <p className="text-xs text-gray-400">Uploading and identifying 8 cards at a time — images are resized for speed.</p>
         </div>
       )}
 
@@ -201,22 +209,12 @@ export default function ScanPage() {
               {identifying && <p className="text-xs text-blue-600">⏳ Identifying… {identifyProgress.done}/{identifyProgress.total}</p>}
             </div>
             <div className="flex gap-2 shrink-0">
-              <button onClick={identifyAll} disabled={identifying} className="px-5 py-2 bg-pokemon-red text-white text-sm font-semibold rounded-lg hover:bg-red-600 disabled:opacity-50">
-                {identifying ? `⏳ ${identifyProgress.done}/${identifyProgress.total}` : '🤖 Identify All'}
-              </button>
               <button onClick={commitAll} disabled={committing || includeCount === 0} className="px-5 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white text-sm font-semibold rounded-lg disabled:opacity-50">
                 {committing ? '⏳…' : `✓ Add ${includeCount} to Inventory`}
               </button>
               <button onClick={reset} className="px-3 py-2 text-gray-500 border border-gray-300 rounded-lg text-sm">Reset</button>
             </div>
           </div>
-
-          {/* Progress bar during identification */}
-          {identifying && (
-            <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-              <div className="h-full bg-gradient-to-r from-pokemon-red to-orange-500 transition-all" style={{ width: `${identifyProgress.total ? (identifyProgress.done / identifyProgress.total) * 100 : 0}%` }} />
-            </div>
-          )}
 
           <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
             <div className="overflow-x-auto max-h-[75vh] overflow-y-auto">
