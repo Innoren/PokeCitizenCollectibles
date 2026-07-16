@@ -27,17 +27,17 @@ export default function ScanPage() {
   const [identifyProgress, setIdentifyProgress] = useState({ done: 0, total: 0 });
 
   // ═══ FILE HANDLING ═══
-  // Resize image client-side for speed (800px wide is plenty for Gemini to read text)
+  // Resize image client-side for speed (400px wide is enough for Gemini to read card text)
   const resizeImage = (file: File): Promise<string> => new Promise((resolve) => {
     const img = new Image();
     img.onload = () => {
-      const MAX = 800;
+      const MAX = 400;
       let w = img.width, h = img.height;
       if (w > MAX) { h = Math.round(h * MAX / w); w = MAX; }
       const canvas = document.createElement('canvas');
       canvas.width = w; canvas.height = h;
       canvas.getContext('2d')!.drawImage(img, 0, 0, w, h);
-      resolve(canvas.toDataURL('image/jpeg', 0.85).split(',')[1]);
+      resolve(canvas.toDataURL('image/jpeg', 0.7).split(',')[1]);
       URL.revokeObjectURL(img.src);
     };
     img.src = URL.createObjectURL(file);
@@ -89,25 +89,61 @@ export default function ScanPage() {
         } catch { row.uploadStatus = 'error'; row.include = false; uploadsDone++; identifyDone++; setUploadProgress({ done: uploadsDone, total: pairs.length }); setIdentifyProgress({ done: identifyDone, total: pairs.length }); setRows([...newRows]); return; }
         uploadsDone++; setUploadProgress({ done: uploadsDone, total: pairs.length }); setRows([...newRows]);
 
-        // 2) Immediately identify with Gemini (don't wait for other uploads)
+        // 2) Immediately identify with Gemini DIRECTLY from browser (skip server round-trip)
         row.matchStatus = 'scanning'; setRows([...newRows]);
         try {
           const base64 = await resizeImage(row.frontFile);
-          const res = await fetch('/api/admin/scan', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ imageBase64: base64 }),
-          });
-          if (!res.ok) throw new Error();
-          const { card } = await res.json();
-          row.name = card.name || ''; row.setName = card.setName || ''; row.number = card.number || '';
-          row.rarity = card.rarity || 'Rare'; row.marketPrice = card.marketPrice;
-          row.price = card.marketPrice ? (parseFloat(card.marketPrice) * (1 + markupVal / 100)).toFixed(2) : '';
+          const geminiRes = await fetch(
+            'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=' + encodeURIComponent(process.env.NEXT_PUBLIC_GEMINI_API_KEY || ''),
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                contents: [{ parts: [
+                  { text: 'Read this Pokemon card. Return ONLY JSON: {"name":"card name","number":"collector number before slash","set":"set name","rarity":"rarity"}' },
+                  { inlineData: { mimeType: 'image/jpeg', data: base64 } },
+                ] }],
+                generationConfig: { temperature: 0, maxOutputTokens: 100 },
+              }),
+            }
+          );
+          if (!geminiRes.ok) throw new Error();
+          const gd = await geminiRes.json();
+          const text = gd.candidates?.[0]?.content?.parts?.[0]?.text || '';
+          const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+          const card = JSON.parse(cleaned);
+          row.name = card.name || ''; row.setName = card.set || ''; row.number = card.number || '';
+          row.rarity = card.rarity || 'Rare';
           row.matchStatus = card.name ? 'matched' : 'not_found';
         } catch { row.matchStatus = 'not_found'; }
         identifyDone++; setIdentifyProgress({ done: identifyDone, total: pairs.length }); setRows([...newRows]);
       }));
     }
-    setIdentifying(false); setPhase('ready');
+    setIdentifying(false);
+
+    // Batch price all identified cards (fast - server-side with our existing pricing system)
+    const markupVal2 = parseFloat(markup) || 10;
+    const identified = newRows.filter((r) => r.matchStatus === 'matched' && r.name);
+    // Price 6 at a time in parallel
+    for (let i = 0; i < identified.length; i += 6) {
+      await Promise.all(identified.slice(i, i + 6).map(async (row) => {
+        try {
+          const res = await fetch('/api/admin/identify', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nameGuess: row.name, number: row.number }),
+          });
+          if (!res.ok) return;
+          const { card } = await res.json();
+          if (card.marketPrice) {
+            row.marketPrice = card.marketPrice;
+            row.price = (parseFloat(card.marketPrice) * (1 + markupVal2 / 100)).toFixed(2);
+          }
+          setRows([...newRows]);
+        } catch {}
+      }));
+    }
+
+    setPhase('ready');
   };
 
   // ═══ COMMIT ═══
