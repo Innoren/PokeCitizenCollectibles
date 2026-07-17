@@ -111,77 +111,61 @@ export async function resolveMarketPriceDetailed(card: CardLike): Promise<PriceR
   const num = cardNumber(card.sku);
   let anyResultsFound = false;
 
-  // 1) Most precise: match by name + card number. This pins the exact card
-  //    (correct set + printing) even when our set name differs from the API's.
-  //    If multiple results share the same name+number, prefer one whose set
-  //    name partially matches ours (avoids grabbing a vintage reprint price).
+  // Helper: only accept a result if its number matches ours (when we have one).
+  const acceptResult = (r: any): number | null => {
+    if (num) {
+      const apiNum = String(r.number || '').replace(/^0+/, '');
+      if (apiNum !== num) return null; // WRONG PRINTING — reject
+    }
+    return extractMarketPrice(r);
+  };
+
+  // 1) name + number (most precise — pins exact printing)
   if (num) {
-    const numResults = await searchCards(`name:"${cleanName}" number:${num}`);
-    if (numResults && numResults.length > 0) {
+    const results = await searchCards(`name:"${cleanName}" number:${num}`);
+    if (results && results.length > 0) {
       anyResultsFound = true;
-      // First: prefer a result whose set matches ours AND whose number is exact.
+      // Prefer set match.
       if (card.setName) {
         const setNorm = card.setName.toLowerCase().replace(/[^a-z0-9]/g, '');
-        const exactMatch = numResults.find((r) => {
+        const setMatch = results.find((r) => {
           const apiSet = (r.set?.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-          const apiNum = String(r.number || '').replace(/^0+/, '');
-          return apiNum === num && (apiSet.includes(setNorm) || setNorm.includes(apiSet));
+          return (apiSet.includes(setNorm) || setNorm.includes(apiSet)) && acceptResult(r) !== null;
         });
-        if (exactMatch) {
-          const price = extractMarketPrice(exactMatch);
-          if (price !== null) return { price, reason: 'ok' };
-        }
+        if (setMatch) { const p = acceptResult(setMatch); if (p !== null) return { price: p, reason: 'ok' }; }
       }
-      // Then: any result whose number matches exactly (regardless of set).
-      const numMatch = numResults.find((r) => {
-        const apiNum = String(r.number || '').replace(/^0+/, '');
-        return apiNum === num && extractMarketPrice(r) !== null;
-      });
-      if (numMatch) {
-        const price = extractMarketPrice(numMatch);
-        if (price !== null) return { price, reason: 'ok' };
-      }
-      // Last resort: first with any price (name+number was already a tight query).
-      for (const r of numResults) {
-        const price = extractMarketPrice(r);
-        if (price !== null) return { price, reason: 'ok' };
-      }
+      // Any exact number match.
+      for (const r of results) { const p = acceptResult(r); if (p !== null) return { price: p, reason: 'ok' }; }
     }
   }
 
-  // 2) Match by name + set name.
-  if (card.setName) {
-    const setResults = await searchCards(
+  // 2) name + set (only when we DON'T have a number — otherwise step 1 is the only valid path)
+  if (!num && card.setName) {
+    const results = await searchCards(
       `name:"${cleanName}" set.name:"${card.setName.replace(/["\\]/g, '')}"`
     );
-    if (setResults && setResults.length > 0) {
+    if (results && results.length > 0) {
       anyResultsFound = true;
-      for (const r of setResults) {
+      for (const r of results) {
         const price = extractMarketPrice(r);
         if (price !== null) return { price, reason: 'ok' };
       }
     }
   }
 
-  // 3) If we have a number but no set match found a price, try name + number
-  //    without the set constraint (handles cases where our set name differs).
-  //    This is safe because the number pins it to a specific printing.
-  if (num && !anyResultsFound) {
-    const looseNum = await searchCards(`number:${num} name:"${cleanName}"`);
-    if (looseNum && looseNum.length > 0) {
+  // If we have a number and found results but no price, it's "no_price".
+  // If we have no number and no set matched, try name+set as last attempt.
+  if (num && card.setName && !anyResultsFound) {
+    const results = await searchCards(
+      `name:"${cleanName}" set.name:"${card.setName.replace(/["\\]/g, '')}"`
+    );
+    if (results && results.length > 0) {
       anyResultsFound = true;
-      for (const r of looseNum) {
-        const price = extractMarketPrice(r);
-        if (price !== null) return { price, reason: 'ok' };
-      }
+      for (const r of results) { const p = acceptResult(r); if (p !== null) return { price: p, reason: 'ok' }; }
     }
   }
 
-  // NOTE: We intentionally do NOT fall back to a name-only search.
-  // A name like "Regice ex" exists across many sets with vastly different prices
-  // ($2 modern vs $244 vintage). Without a set or number to pin the exact printing,
-  // returning a random printing's price would be wrong more often than right.
-
+  // NO name-only fallback. NO returning a price from the wrong collector number.
   return { price: null, reason: anyResultsFound ? 'no_price' : 'not_found' };
 }
 
