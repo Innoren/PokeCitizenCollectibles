@@ -13,6 +13,7 @@ const ITEMS_PER_PAGE = 12;
 interface ShopPageProps {
   searchParams: {
     search?: string;
+    category?: string;
     rarity?: string;
     condition?: string;
     sort?: string;
@@ -22,6 +23,7 @@ interface ShopPageProps {
 
 export default async function ShopPage({ searchParams }: ShopPageProps) {
   const { search, rarity, condition, sort, page } = searchParams;
+  const category = searchParams.category;
   const currentPage = parseInt(page || '1', 10);
 
   // Build conditions
@@ -29,6 +31,10 @@ export default async function ShopPage({ searchParams }: ShopPageProps) {
 
   if (search) {
     conditions.push(ilike(cards.name, `%${search}%`));
+  }
+
+  if (category && category !== 'All') {
+    conditions.push(eq(cards.category, category));
   }
 
   if (rarity && rarity !== 'All') {

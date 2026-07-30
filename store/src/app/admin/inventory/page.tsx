@@ -28,7 +28,7 @@ const EMPTY_FORM: ProductForm = {
   stock: '1',
 };
 
-const PRODUCT_TYPES = ['Single Card', 'Booster Pack', 'Elite Trainer Box', 'Booster Box', 'Collection Box', 'Tin', 'Blister Pack', 'Bundle', 'Other'];
+const PRODUCT_TYPES = ['Single Card', 'Booster Pack', 'Elite Trainer Box', 'Booster Box', 'Collection Box', 'Tin', 'Blister Pack', 'Bundle', '3D Print', 'Other'];
 const RARITIES = ['Common', 'Uncommon', 'Rare', 'Ultra Rare', 'Secret Rare', 'Sealed Product'];
 const CONDITIONS = ['Mint', 'Near Mint', 'Excellent', 'Good', 'Played', 'Factory Sealed'];
 
@@ -108,6 +108,7 @@ export default function InventoryPage() {
         body: JSON.stringify({
           sku: form.sku || null,
           name: form.name,
+          category: form.productType === '3D Print' ? '3D Prints' : 'TCG Cards',
           setName: form.setName,
           rarity: form.rarity,
           condition: form.condition,

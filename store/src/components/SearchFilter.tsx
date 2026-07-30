@@ -5,6 +5,7 @@ import { useCallback, useState, useTransition } from 'react';
 
 const rarities = ['Common', 'Uncommon', 'Rare', 'Ultra Rare', 'Secret Rare', 'Sealed Product'];
 const conditions = ['Mint', 'Near Mint', 'Excellent', 'Good', 'Played', 'Factory Sealed'];
+const categories = ['TCG Cards', '3D Prints'];
 
 export default function SearchFilter() {
   const router = useRouter();
@@ -15,6 +16,7 @@ export default function SearchFilter() {
 
   const activeRarity = searchParams.get('rarity') || '';
   const activeCondition = searchParams.get('condition') || '';
+  const activeCategory = searchParams.get('category') || '';
 
   const createQueryString = useCallback(
     (params: Record<string, string>) => {
@@ -54,7 +56,7 @@ export default function SearchFilter() {
     });
   };
 
-  const hasActiveFilters = !!(activeRarity || activeCondition || searchParams.get('search'));
+  const hasActiveFilters = !!(activeRarity || activeCondition || activeCategory || searchParams.get('search'));
 
   return (
     <aside className="w-full md:w-64 shrink-0">
@@ -90,6 +92,37 @@ export default function SearchFilter() {
               Clear all
             </button>
           )}
+        </div>
+
+        {/* Category */}
+        <div className="px-4 py-4 border-b border-gray-100">
+          <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Category</h4>
+          <ul className="space-y-1.5">
+            {categories.map((cat) => {
+              const active = activeCategory === cat;
+              return (
+                <li key={cat}>
+                  <button
+                    onClick={() => toggleFilter('category', cat)}
+                    className="flex items-center gap-2.5 w-full text-left group"
+                  >
+                    <span className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+                      active ? 'bg-pokemon-red border-pokemon-red' : 'border-gray-300 group-hover:border-pokemon-red'
+                    }`}>
+                      {active && (
+                        <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </span>
+                    <span className={`text-sm transition-colors ${active ? 'text-gray-900 font-medium' : 'text-gray-600 group-hover:text-gray-900'}`}>
+                      {cat}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
         </div>
 
         {/* Rarity */}

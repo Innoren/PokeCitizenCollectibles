@@ -34,8 +34,8 @@ export default async function HomePage() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[
             { name: 'Single Cards', href: '/shop', emoji: '🎴', gradient: 'from-red-500 to-orange-400' },
+            { name: '3D Prints', href: '/shop?category=3D+Prints', emoji: '🖨️', gradient: 'from-emerald-500 to-teal-400' },
             { name: 'Sealed Product', href: '/shop?rarity=Sealed+Product', emoji: '📦', gradient: 'from-blue-500 to-cyan-400' },
-            { name: 'Ultra Rare', href: '/shop?rarity=Ultra+Rare', emoji: '✨', gradient: 'from-purple-500 to-fuchsia-400' },
             { name: 'Secret Rare', href: '/shop?rarity=Secret+Rare', emoji: '⭐', gradient: 'from-amber-400 to-yellow-500' },
           ].map((cat) => (
             <Link

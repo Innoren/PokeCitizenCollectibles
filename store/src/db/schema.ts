@@ -13,6 +13,7 @@ export const cards = pgTable('cards', {
   id: serial('id').primaryKey(),
   sku: varchar('sku', { length: 100 }),
   name: varchar('name', { length: 255 }).notNull(),
+  category: varchar('category', { length: 50 }).notNull().default('TCG Cards'),
   setName: varchar('set_name', { length: 255 }).notNull(),
   rarity: varchar('rarity', { length: 50 }).notNull(),
   condition: varchar('condition', { length: 50 }).notNull(),

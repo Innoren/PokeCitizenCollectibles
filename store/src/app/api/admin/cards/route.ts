@@ -8,7 +8,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
-    const { name, setName, rarity, condition, price, imageUrl, description, stock, sku } = body;
+    const { name, setName, rarity, condition, price, imageUrl, description, stock, sku, category } = body;
 
     // Basic validation
     if (!name || !setName || !rarity || !condition || !price || !imageUrl) {
@@ -30,6 +30,7 @@ export async function POST(request: NextRequest) {
       .values({
         sku: sku || null,
         name,
+        category: category || 'TCG Cards',
         setName,
         rarity,
         condition,

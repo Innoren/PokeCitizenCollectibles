@@ -137,6 +137,9 @@ export default function Navbar() {
             <Link href="/shop" className="px-3 py-1.5 text-gray-700 hover:text-pokemon-red hover:bg-red-50 rounded-md transition-colors">
               All Cards
             </Link>
+            <Link href="/shop?category=3D+Prints" className="px-3 py-1.5 text-gray-700 hover:text-pokemon-red hover:bg-red-50 rounded-md transition-colors">
+              3D Prints
+            </Link>
             <Link href="/shop?rarity=Common" className="px-3 py-1.5 text-gray-700 hover:text-pokemon-red hover:bg-red-50 rounded-md transition-colors">
               Common
             </Link>
