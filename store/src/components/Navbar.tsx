@@ -37,12 +37,15 @@ export default function Navbar() {
 
   return (
     <header className="sticky top-0 z-50 bg-white shadow-sm">
-      {/* Announcement bar */}
-      <div className="bg-gray-900 text-white text-center text-xs sm:text-sm py-2 px-4">
-        <span className="text-gray-300">New arrivals added weekly — </span>
-        <Link href="/shop" className="font-semibold underline underline-offset-2 hover:text-pokemon-yellow transition-colors">
-          Shop the latest
-        </Link>
+      {/* Announcement bar — scrolling marquee */}
+      <div className="bg-gray-900 text-white text-xs sm:text-sm py-2 overflow-hidden">
+        <div className="animate-marquee whitespace-nowrap inline-flex">
+          {[...Array(2)].map((_, i) => (
+            <span key={i} className="mx-8">
+              FREE SHIPPING $200+ &nbsp;•&nbsp; 100% AUTHENTIC &nbsp;•&nbsp; SECURE PACKAGING &nbsp;•&nbsp; COLLECTOR OWNED &nbsp;•&nbsp; FREE SHIPPING $200+ &nbsp;•&nbsp; 100% AUTHENTIC &nbsp;•&nbsp; SECURE PACKAGING &nbsp;•&nbsp; COLLECTOR OWNED
+            </span>
+          ))}
+        </div>
       </div>
 
       {/* Top bar */}

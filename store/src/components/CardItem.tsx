@@ -31,7 +31,13 @@ export default function CardItem({ card }: CardItemProps) {
     <Link href={`/shop/${card.id}`} className="group">
       <div className="relative bg-white rounded-xl border border-gray-200 overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
         {/* Image Container */}
-        <div className="relative aspect-[3/4] overflow-hidden bg-gray-100 p-3">
+        <div className="relative aspect-[2/3] overflow-hidden bg-gray-100 p-3">
+          {/* Market Price Badge */}
+          {card.lastMarketPrice && (
+            <div className="absolute top-2 left-2 z-10 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500 text-white shadow-sm">
+              MARKET PRICE
+            </div>
+          )}
           <div className="relative w-full h-full flex items-center justify-center">
             {card.imageUrl ? (
               <Image
@@ -68,7 +74,7 @@ export default function CardItem({ card }: CardItemProps) {
 
         {/* Card Info */}
         <div className="p-3 border-t border-gray-100">
-          <p className="text-xs text-gray-500 mb-0.5">{card.setName}</p>
+          <p className="text-xs font-semibold text-pokemon-blue uppercase tracking-wide mb-0.5">{card.setName}</p>
           <h3 className="text-sm font-semibold text-gray-900 mb-1 group-hover:text-pokemon-red transition-colors line-clamp-1">
             {card.name}
           </h3>
@@ -81,9 +87,15 @@ export default function CardItem({ card }: CardItemProps) {
           </div>
 
           <div className="flex items-center justify-between">
-            <span className="text-lg font-bold text-gray-900">
-              {formatPrice(card.price)}
-            </span>
+            <div>
+              <span className="text-lg font-bold text-gray-900">
+                {formatPrice(card.price)}
+              </span>
+              <p className="text-xs text-green-600 font-medium mt-0.5">
+                <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 mr-1 align-middle" />
+                {card.stock} available
+              </p>
+            </div>
             <button
               onClick={handleAddToCart}
               disabled={card.stock === 0}
