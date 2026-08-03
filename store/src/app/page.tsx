@@ -1,6 +1,6 @@
 import { db } from '@/db';
 import { cards } from '@/db/schema';
-import { desc } from 'drizzle-orm';
+import { desc, eq } from 'drizzle-orm';
 import Hero from '@/components/Hero';
 import CardGrid from '@/components/CardGrid';
 import Link from 'next/link';
@@ -9,7 +9,19 @@ export const dynamic = 'force-dynamic';
 
 export default async function HomePage() {
   let featuredCards: any[] = [];
+  let spotlightCard: any = null;
   try {
+    // Try to find the explicitly featured card first
+    const [featured] = await db
+      .select()
+      .from(cards)
+      .where(eq(cards.featured, true))
+      .limit(1);
+
+    if (featured) {
+      spotlightCard = featured;
+    }
+
     featuredCards = await db
       .select()
       .from(cards)
@@ -20,7 +32,7 @@ export default async function HomePage() {
     console.error('Failed to fetch cards:', e);
   }
 
-  const spotlight = featuredCards.find((c) => c.imageUrl) || featuredCards[0] || null;
+  const spotlight = spotlightCard || featuredCards.find((c) => c.imageUrl) || featuredCards[0] || null;
 
   return (
     <div className="bg-gray-50/60">

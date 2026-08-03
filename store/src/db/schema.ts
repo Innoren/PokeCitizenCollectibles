@@ -25,6 +25,7 @@ export const cards = pgTable('cards', {
   imageUrl: text('image_url').notNull(),
   description: text('description'),
   stock: integer('stock').notNull().default(0),
+  featured: boolean('featured').notNull().default(false),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 

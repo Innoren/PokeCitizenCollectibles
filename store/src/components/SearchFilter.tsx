@@ -127,7 +127,7 @@ export default function SearchFilter() {
 
         {/* Rarity */}
         <div className="px-4 py-4 border-b border-gray-100">
-          <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Category</h4>
+          <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Rarity</h4>
           <ul className="space-y-1.5">
             {rarities.map((rarity) => {
               const active = activeRarity === rarity;
